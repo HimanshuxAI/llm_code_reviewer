@@ -1,62 +1,47 @@
 interface ScoreDonutProps { score: number; }
 
 const getColor = (score: number) => {
-  if (score >= 90) return "text-emerald-400";
-  if (score >= 75) return "text-emerald-400";
-  if (score >= 50) return "text-amber-400";
-  if (score >= 25) return "text-orange-400";
-  return "text-red-400";
-};
-
-const getLabel = (score: number) => {
-  if (score >= 90) return "Excellent";
-  if (score >= 75) return "Good";
-  if (score >= 50) return "Fair";
-  if (score >= 25) return "Needs work";
-  return "Critical";
+  if (score >= 90) return { color: "text-emerald-600", border: "border-emerald-500/20", bg: "bg-emerald-50", label: "Excellent" };
+  if (score >= 75) return { color: "text-emerald-600", border: "border-emerald-500/20", bg: "bg-emerald-50", label: "Great" };
+  if (score >= 50) return { color: "text-amber-600", border: "border-amber-500/20", bg: "bg-amber-50", label: "Fair" };
+  if (score >= 25) return { color: "text-orange-600", border: "border-orange-500/20", bg: "bg-orange-50", label: "Needs work" };
+  return { color: "text-red-600", border: "border-red-500/20", bg: "bg-red-50", label: "Critical" };
 };
 
 export default function ScoreDonut({ score }: ScoreDonutProps) {
-  const color = getColor(score);
-  const label = getLabel(score);
-  const circumference = 2 * Math.PI * 24;
+  const { color, border, bg, label } = getColor(score);
+  const circumference = 2 * Math.PI * 26;
   const offset = circumference * (1 - Math.max(0, Math.min(100, score)) / 100);
+  const colorClass = color === "text-emerald-600" ? "text-emerald-600" : color === "text-amber-600" ? "text-amber-600" : color === "text-orange-600" ? "text-orange-600" : "text-red-600";
 
   return (
     <div className="panel p-6 fade-in">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Code quality score</p>
-          <p className={`text-3xl font-bold ${color}`}>{Math.max(0, score)}</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Code quality score</p>
+          <p className={`text-4xl font-extrabold ${colorClass}`}>{Math.max(0, score)}</p>
         </div>
-        <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${color === "text-emerald-400" ? "border-emerald-500/20 bg-emerald-500/5" : color === "text-amber-400" ? "border-amber-500/20 bg-amber-500/5" : color === "text-orange-400" ? "border-orange-500/20 bg-orange-500/5" : "border-red-500/20 bg-red-500/5"}`}>
+        <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${border} ${bg}`}>
           {label}
         </span>
       </div>
-      <div className="relative w-24 h-24 mx-auto mb-2">
-        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 50 50">
+      <div className="relative w-28 h-28 mx-auto mb-3">
+        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 56 56">
+          <circle cx="28" cy="28" r="26" fill="none" stroke="#f1f5f9" strokeWidth="5" />
           <circle
-            cx="25"
-            cy="25"
-            r="24"
-            fill="none"
-            stroke="white/5"
-            strokeWidth="4"
-          />
-          <circle
-            cx="25"
-            cy="25"
-            r="24"
+            cx="28"
+            cy="28"
+            r="26"
             fill="none"
             stroke="currentColor"
-            strokeWidth="4"
+            strokeWidth="5"
             strokeLinecap="round"
-            className={color}
+            className={colorClass}
             style={{ strokeDasharray: circumference, strokeDashoffset: offset, transition: "stroke-dashoffset 0.8s ease-out" }}
           />
         </svg>
       </div>
-      <p className="text-xs text-slate-500 text-center">Severity-weighted. Lower findings = higher score.</p>
+      <p className="text-xs text-slate-500 text-center">Severity-weighted. 0-100.</p>
     </div>
   );
 }

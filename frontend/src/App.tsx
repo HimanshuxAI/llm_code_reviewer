@@ -10,7 +10,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-black text-white">
+      <div className="min-h-screen bg-gradient-to-br from-[#ecfeff] via-[#f1f5f9] to-[#fffbeb]">
         <Nav />
         <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Routes>

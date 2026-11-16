@@ -47,22 +47,22 @@ export default function Submit() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div>
-        <h1 className="text-2xl font-bold text-white">New review</h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <h1 className="h1">New review</h1>
+        <p className="mt-2 text-sm text-slate-500">
           Paste or upload source code. We scan it for bugs, security issues, and
           quality problems, then score it from 0 to 100.
         </p>
       </div>
 
-      <div className="panel p-6 shadow-2xl space-y-4">
+      <div className="panel p-7 shadow-lg space-y-5">
         <div className="flex items-center justify-between">
-          <label className="text-sm font-semibold text-slate-300">Source code</label>
+          <label className="text-sm font-bold text-slate-600">Source code</label>
           <button
             type="button"
             onClick={() => document.getElementById("file-input")?.click()}
-            className="btn-outline px-3 py-1.5 text-xs font-medium"
+            className="btn-outline px-3 py-1.5 text-xs font-bold"
           >
             <Upload className="h-3 w-3 mr-1.5" /> Upload file
           </button>
@@ -78,11 +78,11 @@ export default function Submit() {
         <CodeEditor value={code} onChange={setCode} filename={filename} />
 
         {filename && (
-          <p className="text-[10px] text-slate-500 font-mono">File: {filename}</p>
+          <p className="text-[10px] text-slate-400 font-mono">File: {filename}</p>
         )}
 
         {error && (
-          <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
+          <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         )}
@@ -97,7 +97,7 @@ export default function Submit() {
         </button>
       </div>
 
-      <div className="text-[11px] text-slate-500 max-w-md">
+      <div className="text-[11px] text-slate-400 max-w-md">
         Static analysis is always on. LLM review is used when an API key is
         configured on the backend.
       </div>

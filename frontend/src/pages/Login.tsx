@@ -31,21 +31,21 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-black/50 px-4">
-      <div className="max-w-md w-full glass p-8 shadow-2xl">
-        <div className="mb-6">
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="max-w-md w-full glass p-8 shadow-lg">
+        <div className="mb-7">
           <div className="flex items-center gap-2 mb-3">
-            <ShieldCheck className="h-5 w-5 text-blue-400" />
-            <h1 className="text-xl font-bold text-white">Sign in</h1>
+            <ShieldCheck className="h-5 w-5 text-blue-500" />
+            <h1 className="h2">Sign in</h1>
           </div>
-          <p className="text-sm text-slate-400">Review your code securely. Enter your account below.</p>
+          <p className="text-sm text-slate-500">Review your code securely. Enter your account below.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Email address</label>
+            <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-widest">Email address</label>
             <div className="relative">
-              <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+              <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <input
                 type="email"
                 required
@@ -58,9 +58,9 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Password</label>
+            <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-widest">Password</label>
             <div className="relative">
-              <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+              <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <input
                 type="password"
                 required
@@ -74,7 +74,7 @@ export default function Login() {
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
+            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           )}
@@ -88,9 +88,9 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="mt-8 text-center text-xs text-slate-500">
+        <p className="mt-9 text-center text-xs text-slate-500">
           Don't have an account?{" "}
-          <a href="/register" className="text-blue-400 hover:underline ml-1">Create one</a>
+          <a href="/register" className="text-blue-600 hover:text-blue-700 ml-1 font-medium">Create one</a>
         </p>
       </div>
     </div>
