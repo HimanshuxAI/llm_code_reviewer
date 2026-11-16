@@ -41,6 +41,7 @@ Frontend:
 - Tailwind CSS
 - React Router
 - lucide-react icons
+- vitest and Testing Library for tests
 
 ## Repository layout
 
@@ -48,7 +49,7 @@ Frontend:
 llm_code_reviewer/
 backend/
   app/
-    main.py            FastAPI app, CORS, health endpoint, router mounting
+    main.py            FastAPI app, CORS, lifespan startup, health endpoint, router mounting
     config.py          settings loaded from .env
     db/
       session.py       SQLite engine, session dependency, Base
@@ -68,20 +69,19 @@ backend/
       scorer.py        severity-weighted 0-100 score
       pipeline.py      merge and deduplicate static and LLM findings
     tests/
-      pytest test suite for auth, scanner, scorer, pipeline, and API
+      pytest test suite for auth, scanner, scorer, pipeline, app, and API
 frontend/
   src/
     main.tsx           entry point
     App.tsx            router shell
     api.ts             fetch client with JWT interceptor
-    components/        Nav, ProtectedRoute, ScoreGauge, SeverityBadge, FindingCard
-    pages/             Login, Register, Submit, Results, History
-  index.css            Tailwind base + component styles
-  tailwind.config.js
+    index.css          design system and workspace layout
+    components/        Workspace, ErrorBoundary, ProtectedRoute, CodeEditor, ScoreDial,
+                       SeverityBadge, FindingCard, DiffPreview, CopyButton, ScanLoader,
+                       EmptyState
+    pages/             Landing, Login, Register, Submit, Results, History
+    test/setup.ts      vitest setup
   vite.config.ts
-docs/superpowers/
-  specs/               design specification
-  plans/               implementation plan
 ```
 
 ## API endpoints
@@ -89,13 +89,13 @@ docs/superpowers/
 All backend endpoints are prefixed with `/api`.
 
 Authentication:
-- `POST /api/auth/register` — body `{email, password}`, returns `{id, email}`, status 201
+- `POST /api/auth/register` — body `{email, password}`, returns `{id, email}`, status 201. Password must be at least 8 characters.
 - `POST /api/auth/login` — body `{email, password}`, returns `{access_token, token_type}`
 
 Reviews:
 - `POST /api/reviews` — body `{source_code, filename?}`, requires auth, returns the created review
 - `GET /api/reviews` — requires auth, returns list of the current user's reviews newest first
-- `GET /api/reviews/{id}` — requires auth and ownership, returns full review with findings
+- `GET /api/reviews/{id}` — requires auth and ownership, returns the full review including `source_code` and findings
 
 Other:
 - `GET /api/health` — returns `{"status": "ok"}`
@@ -105,13 +105,13 @@ Other:
 Copy `backend/.env.example` to `backend/.env` and edit the values:
 
 ```
-SECRET_KEY=change-me-in-production
+SECRET_KEY=replace-with-a-random-32-byte-string
 LLM_API_KEY=
 LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 LLM_MODEL=gemini-2.0-flash
 ```
 
-- `SECRET_KEY` — signing key for JWT tokens. Change the default before any real use.
+- `SECRET_KEY` — signing key for JWT tokens. Must be at least 32 bytes for HS256. Replace the default before any real use, otherwise anyone can forge tokens.
 - `LLM_API_KEY` — API key for the language model. Leave empty to run static analysis only.
 - `LLM_BASE_URL` — base URL of an OpenAI-compatible chat completions endpoint.
 - `LLM_MODEL` — model name to request.
@@ -148,6 +148,13 @@ Run backend tests:
 cd backend
 source .venv/bin/activate
 pytest
+```
+
+Run frontend tests:
+
+```
+cd frontend
+npm test
 ```
 
 Build frontend for production:
