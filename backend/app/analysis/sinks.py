@@ -3,9 +3,17 @@
 Sources mark where attacker-controlled data enters. Sinks mark calls where
 untrusted data must never appear. The catalogue holds patterns that are
 unsafe on their own, independent of dataflow.
+
+SOURCES and SINKS contain broad bare names (e.g. python "get", javascript
+"write") accepted as plan-mandated data; the taint engine must anchor on
+call-position context before treating them as meaningful.
 """
 import re
 from dataclasses import dataclass
+
+from app.analysis.tokenizer import strip_comments
+
+MAX_FINDINGS = 60
 
 SOURCES = {
     "python": {"input", "get", "post", "args", "form", "json",
@@ -42,21 +50,21 @@ class SemanticRule:
 
 SEMANTIC_RULES = [
     SemanticRule("SEC013", "Weak cipher algorithm", "high",
-                 re.compile(r"getInstance\(\s*[\"'](DES|RC4|DESede)[\"']", re.I),
+                 re.compile(r"getInstance\(\s*[\"'](DES|RC4|DESede)[\/\w-]*[\"']", re.I),
                  "DES and RC4 are broken ciphers; data encrypted with them is recoverable.",
                  "Use AES-256-GCM.", frozenset({"java"})),
     SemanticRule("SEC014", "Weak digest algorithm", "medium",
-                 re.compile(r"getInstance\(\s*[\"'](MD5|SHA-?1)[\"']", re.I),
+                 re.compile(r"getInstance\(\s*[\"'](MD5|SHA-?1)[\/\w-]*[\"']", re.I),
                  "MD5 and SHA-1 are broken for integrity checks.",
                  "Use SHA-256 or better.", frozenset({"java"})),
     SemanticRule("SEC015", "XMLDecoder on untrusted data", "high",
-                 re.compile(r"new\s+XMLDecoder\b"),
+                 re.compile(r"\bnew\s+XMLDecoder\b"),
                  "XMLDecoder deserialises arbitrary objects and allows remote code execution.",
                  "Use a strict XML parser or JSON with schema validation.", frozenset({"java"})),
     SemanticRule("SEC016", "TrustManager that accepts everything", "high",
-                 re.compile(r"checkClientTrusted\s*\([^)]*\)\s*\{\s*\}|checkServerTrusted\s*\([^)]*\)\s*\{\s*\}"),
-                 "A no-op trust manager accepts any certificate, defeating TLS.",
-                 "Validate certificates against a real CA bundle.", frozenset({"java"})),
+                 re.compile(r"check(?:Client|Server)Trusted\s*\("),
+                 "A custom TrustManager method was defined; this is the canonical trust-all pattern in Android/TLS code.",
+                 "Delete the custom trust manager and validate against a real CA bundle.", frozenset({"java"})),
     SemanticRule("JS001", "document.write()", "medium",
                  re.compile(r"\bdocument\.write\s*\("),
                  "document.write() injects HTML directly; unsanitised input leads to XSS.",
@@ -82,7 +90,7 @@ SEMANTIC_RULES = [
                  "atoi() returns 0 on error and cannot signal failure.",
                  "Use strtol() with an error check.", frozenset({"c", "cpp"})),
     SemanticRule("C003", "scanf with unguarded %s", "high",
-                 re.compile(r"scanf\s*\(\s*\"[^\"]*%s"),
+                 re.compile(r"\bscanf\s*\(\s*\"[^\"]*%s"),
                  "scanf(\"%s\") writes unbounded input and overflows buffers.",
                  "Use fgets() with a size, or scanf(\"%99s\").", frozenset({"c", "cpp"})),
     SemanticRule("C004", "rand() for security", "medium",
@@ -95,12 +103,16 @@ SEMANTIC_RULES = [
 def detect_semantic_patterns(source: str, language: str) -> list[dict]:
     if language == "text":
         return []
-    from app.analysis.tokenizer import strip_comments
     masked = strip_comments(source, language)
+    has_child_process = "child_process" in masked
     findings = []
+    # Line-oriented on purpose: rules cannot span lines, so multi-line
+    # constructs must fit on one line or be refactored.
     for lineno, line in enumerate(masked.splitlines(), start=1):
         for rule in SEMANTIC_RULES:
             if language not in rule.languages:
+                continue
+            if rule.id == "JS004" and not has_child_process:
                 continue
             if rule.pattern.search(line):
                 findings.append({
@@ -116,4 +128,4 @@ def detect_semantic_patterns(source: str, language: str) -> list[dict]:
                     "confidence": "high",
                     "related_lines": [],
                 })
-    return findings[:60]
+    return findings[:MAX_FINDINGS]

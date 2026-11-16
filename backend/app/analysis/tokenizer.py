@@ -16,6 +16,14 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 
+class _Unterminated(Exception):
+    """Raised when a block comment or string is never closed."""
+
+    def __init__(self, kind: str):
+        super().__init__(kind)
+        self.kind = kind
+
+
 @dataclass(frozen=True)
 class Token:
     kind: str    # "code" | "string" | "comment" | "number" | "identifier"
@@ -73,7 +81,7 @@ def _scan_generic(source: str, cfg: dict) -> list[Token]:
                     start_line, start_col = line, col
                     end = source.find(close_m, i + len(open_m))
                     if end == -1:
-                        end = n - len(close_m)
+                        raise _Unterminated("block comment")
                     text = source[i:end + len(close_m)]
                     nl = text.count("\n")
                     if nl:
@@ -110,7 +118,9 @@ def _scan_generic(source: str, cfg: dict) -> list[Token]:
                         if source.startswith(closer, j):
                             break
                         j += 1
-                    end = j + len(closer) if j < n and source.startswith(closer, j) else j
+                    if not (j < n and source.startswith(closer, j)):
+                        raise _Unterminated("string")
+                    end = j + len(closer)
                     text = source[i:end]
                     nl = text.count("\n")
                     if nl:
@@ -196,7 +206,11 @@ def tokenize_source(source: str, language: str) -> list[Token]:
     if cfg is None:
         logger.warning("tokenize_source: unsupported language %r; returning []", language)
         return []
-    return _scan_generic(source, cfg)
+    try:
+        return _scan_generic(source, cfg)
+    except _Unterminated as exc:
+        logger.warning("tokenize_source: unterminated %s; returning []", exc.kind)
+        return []
 
 
 def _blanked(source: str, tokens: list[Token], kinds: set[str]) -> str:
@@ -228,9 +242,11 @@ def _blanked(source: str, tokens: list[Token], kinds: set[str]) -> str:
 def strip_comments_and_strings(source: str, language: str) -> str:
     """Mask comments and string contents. Line numbers preserved.
 
-    Fail-open contract: if the source cannot be parsed, the source is
-    returned unchanged so findings in the code remain visible. Callers
-    must treat the result as a best-effort mask, not a guarantee.
+    Fail-open contract: if the source cannot be tokenised (e.g. a Python
+    syntax error or an unterminated block comment/string), tokenize_source
+    returns []; _blanked then replaces nothing, so the source is returned
+    unchanged and findings in the code remain visible. Callers must treat
+    the result as a best-effort mask, not a guarantee.
     """
     tokens = tokenize_source(source, language)
     return _blanked(source, tokens, {"comment", "string"})
@@ -239,8 +255,10 @@ def strip_comments_and_strings(source: str, language: str) -> str:
 def strip_comments(source: str, language: str) -> str:
     """Mask comments only. Strings stay intact so crypto/pattern checks work.
 
-    Fail-open contract: if the source cannot be parsed, the source is
-    returned unchanged (see strip_comments_and_strings).
+    Fail-open contract: if the source cannot be tokenised (e.g. a Python
+    syntax error or an unterminated block comment/string), tokenize_source
+    returns []; _blanked then replaces nothing, so the source is returned
+    unchanged (see strip_comments_and_strings).
     """
     tokens = tokenize_source(source, language)
     return _blanked(source, tokens, {"comment"})

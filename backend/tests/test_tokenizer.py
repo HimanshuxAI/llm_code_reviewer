@@ -1,4 +1,4 @@
-from app.analysis.tokenizer import tokenize_source, strip_comments_and_strings
+from app.analysis.tokenizer import tokenize_source, strip_comments, strip_comments_and_strings
 
 
 def test_comment_is_not_code():
@@ -50,7 +50,6 @@ def test_unknown_language_returns_empty_list():
 
 
 def test_strip_comments_masks_comment_but_keeps_string():
-    from app.analysis.tokenizer import strip_comments
     src = 'const url = "https://example.com"; // TODO: rotate keys\n'
     out = strip_comments(src, "javascript")
     assert "// TODO: rotate keys" not in out
@@ -73,6 +72,18 @@ def test_unterminated_string_and_comment_do_not_crash():
     assert tokenize_source('const s = "unterminated\n', "javascript") is not None
     assert tokenize_source('/* unterminated block comment', "c") is not None
     assert tokenize_source('const t = `unterminated\n', "javascript") is not None
+
+
+def test_unterminated_block_comment_returns_empty_and_strip_is_fail_open():
+    src = '/* unterminated block comment\nconst s = 1;\n'
+    assert tokenize_source(src, "javascript") == []
+    assert strip_comments(src, "javascript") == src
+
+
+def test_unterminated_string_returns_empty_and_strip_is_fail_open():
+    src = 'const s = "unterminated\nconst t = 1;\n'
+    assert tokenize_source(src, "c") == []
+    assert strip_comments(src, "c") == src
 
 
 def test_python_fstring_literal_is_string():
