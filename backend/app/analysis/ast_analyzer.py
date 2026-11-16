@@ -116,7 +116,7 @@ def analyse_python(source_code: str) -> list[dict]:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             all_defaults = list(node.args.defaults) + list(node.args.kw_defaults)
             for default in all_defaults:
-                if isinstance(default, (ast.List, ast.Dict, ast.Set)) and default is not None:
+                if isinstance(default, (ast.List, ast.Dict, ast.Set)):
                     add("BUG001", "Mutable default argument", "high", node.lineno,
                         "The default list/dict/set is shared across all calls, so bugs leak state between invocations.",
                         "Use None as the default and initialise inside the function.",
