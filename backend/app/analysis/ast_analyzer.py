@@ -37,20 +37,24 @@ def _http_client_names(tree):
     """Names assigned from an HTTP client constructor (s = requests.Session())."""
     names = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
             continue
-        target = node.targets[0]
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        else:
+            targets = [node.target]
         value = node.value
-        if not isinstance(target, ast.Name):
-            continue
         if not (isinstance(value, ast.Call) and isinstance(value.func, ast.Attribute)):
             continue
         if value.func.attr not in {"Session", "Client", "AsyncClient"}:
             continue
         base = value.func.value
         base_id = getattr(base, "id", None) or getattr(base, "attr", "")
-        if base_id in HTTP_MODULES:
-            names.add(target.id)
+        if base_id not in HTTP_MODULES:
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                names.add(target.id)
     return names
 
 
@@ -110,8 +114,9 @@ def analyse_python(source_code: str) -> list[dict]:
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for default in node.args.defaults:
-                if isinstance(default, (ast.List, ast.Dict, ast.Set)):
+            all_defaults = list(node.args.defaults) + list(node.args.kw_defaults)
+            for default in all_defaults:
+                if isinstance(default, (ast.List, ast.Dict, ast.Set)) and default is not None:
                     add("BUG001", "Mutable default argument", "high", node.lineno,
                         "The default list/dict/set is shared across all calls, so bugs leak state between invocations.",
                         "Use None as the default and initialise inside the function.",
