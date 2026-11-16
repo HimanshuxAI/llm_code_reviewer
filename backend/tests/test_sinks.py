@@ -38,3 +38,14 @@ def test_findings_have_required_keys():
                           "explanation", "suggestion", "source", "fixed_snippet"}
         assert f["source"] == "sinks"
         assert f["fixed_snippet"] is None
+
+
+def test_findings_have_required_keys_when_matched():
+    code = 'Cipher c = Cipher.getInstance("DES");\n'
+    matches = detect_semantic_patterns(code, "java")
+    assert matches
+    for f in matches:
+        assert set(f) >= {"rule_id", "title", "severity", "line",
+                          "explanation", "suggestion", "source", "fixed_snippet"}
+        assert f["source"] == "sinks"
+        assert f["fixed_snippet"] is None
