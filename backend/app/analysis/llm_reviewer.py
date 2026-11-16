@@ -61,10 +61,14 @@ def review_with_llm(source_code: str, language: str) -> list[dict]:
         ],
     }
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
+    timeout = httpx.Timeout(
+        settings.llm_timeout_seconds,
+        connect=5.0,
+    )
     try:
         resp = httpx.post(
             settings.llm_base_url.rstrip("/") + "/chat/completions",
-            json=payload, headers=headers, timeout=60,
+            json=payload, headers=headers, timeout=timeout,
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]

@@ -14,7 +14,8 @@ Users register with an email and password, authenticate with JWT tokens, and can
 - Submit source code by pasting or uploading a file
 - Automatic language detection (Python, JavaScript, Java, C, C++)
 - Static heuristic security scanner that runs without any API key
-- Optional LLM-based review through an OpenAI-compatible endpoint
+- Optional LLM-based review through an OpenAI-compatible endpoint, off by default
+- Works fully offline with no API key and no internet connection
 - Severity-ranked findings: critical, high, medium, low
 - Plain-English explanations and fix suggestions per finding
 - Corrected code snippets when available
@@ -100,6 +101,26 @@ Reviews:
 Other:
 - `GET /api/health` — returns `{"status": "ok"}`
 
+## Running without an API key
+
+The application is fully functional with no API key and no internet connection. The static
+scanner is a local regex engine over 14 rules, so a review completes in roughly 15
+milliseconds and returns real findings with a real score.
+
+An API key is optional and only adds a second opinion. When `LLM_API_KEY` is empty the
+model is never contacted. When a key is set but the endpoint is unreachable, the request
+fails over to static findings rather than erroring, so a bad key can never break a review.
+
+To enable the LLM review, get a free key and set one variable:
+
+```
+LLM_API_KEY=your-key-here
+```
+
+That is the only change needed. The default endpoint is the Gemini free tier through its
+OpenAI-compatible interface, so `LLM_BASE_URL` and `LLM_MODEL` can stay as they are. Any
+other OpenAI-compatible endpoint works by changing those two values instead.
+
 ## Configuration
 
 Copy `backend/.env.example` to `backend/.env` and edit the values:
@@ -109,12 +130,14 @@ SECRET_KEY=replace-with-a-random-32-byte-string
 LLM_API_KEY=
 LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 LLM_MODEL=gemini-2.0-flash
+LLM_TIMEOUT_SECONDS=30
 ```
 
 - `SECRET_KEY` — signing key for JWT tokens. Must be at least 32 bytes for HS256. Replace the default before any real use, otherwise anyone can forge tokens.
 - `LLM_API_KEY` — API key for the language model. Leave empty to run static analysis only.
 - `LLM_BASE_URL` — base URL of an OpenAI-compatible chat completions endpoint.
 - `LLM_MODEL` — model name to request.
+- `LLM_TIMEOUT_SECONDS` — how long to wait for the model before falling back to static findings.
 
 ## How to run
 
