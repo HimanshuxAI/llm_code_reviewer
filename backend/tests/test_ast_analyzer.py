@@ -304,3 +304,156 @@ def test_async_with_binding_does_not_outlive_the_block():
 def test_starred_args_skip_timeout_check():
     code = "import requests\nargs = ()\nrequests.get('http://x', *args)\n"
     assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_aliased_import_shadowed_in_function_is_not_flagged():
+    code = (
+        "import requests as rq\n"
+        "def f():\n"
+        "    rq = {}\n"
+        "    rq.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_aliased_import_shadowed_at_module_level_is_not_flagged():
+    code = (
+        "import requests as rq\n"
+        "rq = {}\n"
+        "rq.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_aliased_import_unblocked_alias_still_fires():
+    # bare sanity: alias itself still fires when nothing was shadowed
+    code = "import requests as rq\nrq.get('http://x')\n"
+    assert any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_module_requests_name_shadowed_is_not_flagged():
+    code = (
+        "import requests\n"
+        "requests = {}\n"
+        "requests.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_function_dotted_key_does_not_leak_into_sibling_function():
+    code = (
+        "import httpx\n"
+        "def make(cfg):\n"
+        "    cfg.client = httpx.Client()\n"
+        "def use(cfg):\n"
+        "    cfg.client.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_function_dotted_tombstone_does_not_leak_into_module_frame():
+    code = (
+        "import httpx\n"
+        "cfg = make_cfg()\n"
+        "cfg.client = httpx.Client()\n"
+        "def use(cfg):\n"
+        "    cfg.client = {}\n"
+        "use(cfg)\n"
+        "cfg.client.get('http://x')\n"
+    )
+    # module-level cfg.client is a client; use()'s tombstone must not clear it
+    assert any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_parameter_binding_tombstones_module_client():
+    code = (
+        "import requests\n"
+        "s = requests.Session()\n"
+        "def f(s):\n"
+        "    s.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_comprehension_target_tombstones_module_client():
+    code = (
+        "import requests\n"
+        "s = requests.Session()\n"
+        "x = [s.get('http://x') for s in ['a', 'b']]\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_for_target_tombstones_module_client():
+    code = (
+        "import requests\n"
+        "s = requests.Session()\n"
+        "for s in ['a', 'b']:\n"
+        "    s.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_non_client_with_binding_tombstones():
+    code = (
+        "import requests\n"
+        "s = requests.Session()\n"
+        "with open('f') as s:\n"
+        "    s.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_from_import_star_constructor_is_flagged():
+    code = (
+        "from requests import *\n"
+        "s = Session()\n"
+        "s.get('http://x')\n"
+    )
+    assert any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_from_import_star_dotted_module_call_is_flagged():
+    code = (
+        "from requests import *\n"
+        "api.get('http://x')\n"
+    )
+    assert any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_last_import_of_same_name_wins():
+    code = (
+        "from requests import Session\n"
+        "from sqlalchemy.orm import Session\n"
+        "s = Session()\n"
+        "s.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_last_import_of_same_name_wins_reversed_order():
+    code = (
+        "from sqlalchemy.orm import Session\n"
+        "from requests import Session\n"
+        "s = Session()\n"
+        "s.get('http://x')\n"
+    )
+    assert any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_explicit_negative_import_wins_over_star():
+    code = (
+        "from requests import *\n"
+        "from sqlalchemy.orm import Session\n"
+        "s = Session()\n"
+        "s.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_from_import_api_dotted_call_is_flagged():
+    code = (
+        "from requests import api\n"
+        "api.get('http://x')\n"
+    )
+    assert any(f["rule_id"] == "PY002" for f in analyse_python(code))

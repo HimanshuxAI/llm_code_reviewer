@@ -155,21 +155,36 @@ Python only, using the standard library `ast` module. Implemented rules:
   collects a local-name → module map from `import` and `from ... import` statements
   first, so `from sqlalchemy.orm import Session` (and any other unrelated
   `Session`/`Client` source, covered by a false-positive test) is never treated as an
-  HTTP client. Scope is three-level: one persistent module frame, one persistent frame
+  HTTP client. Imports from non-HTTP modules record negative provenance, so an
+  unrelated Session imported after a requests one never flags either — the last
+  import of the same name wins. `from requests import *` records a `*` binding in
+  that map and confers requests provenance on otherwise-unbound names, for both the
+  bare-name constructor branch (`Session()`) and the Attribute root check
+  (`api.get(...)`); an explicit record always wins over a `*`-import. Dotted calls
+  fire when the root resolves through that map: `from requests import api` makes
+  `api.get(...)` flag, and `import requests as rq` fires via the alias; `from
+  requests import *` fires the same way. A bare `from requests import get`
+  followed by `get(url)` stays untracked by design. Import provenance is
+  order-insensitive — a module-level alias applies file-wide, including lines
+  before its import.
+  Scope is three-level: one persistent module frame, one persistent frame
   per class body (all methods of the class see the same frame), and a transient frame
   per function/method. Function frames merge their dotted keys — both registered keys
-  and tombstones — into the parent frame on exit; keys without a dot stay local to the
-  function. A non-client reassignment (`self.client = {}`) writes a tombstone in the
+  and tombstones — into their parent on exit only when the parent is a class frame:
+  methods share the class namespace, but nothing defined in a module-level function
+  leaks file-wide. Class frames in turn never merge into the module frame. Keys
+  without a dot stay local to the function. A non-client reassignment (`self.client = {}`) writes a tombstone in the
   current frame instead of deleting the outer registration; lookup walks from the
   innermost frame outwards and the nearest frame with a registration or a tombstone
   wins, so `s = requests.Session()` at module level followed by `s = {}` inside a
   function is never flagged, and `self.client = {}` in one method clears the binding
-  for sibling methods as well. `with`/`async with` bindings live in a transient frame
+  for sibling methods as well. Tombstones are written by every binding form:
+  parameters, comprehension targets, `for` targets, and non-client `with` bindings
+  all shadow an outer client within their scope. `with`/`async with` bindings live in
+  a transient frame
   that is discarded at the end of the block, so a closed client is never flagged
   afterwards. Calls carrying `**kwargs` or a `*args` positional argument are skipped,
-  because the timeout flag cannot be seen. Dotted module calls
-  (`from requests import api; api.get(...)`) and a bare `from requests import get`
-  followed by `get(url)` are not tracked. Findings are capped at
+  because the timeout flag cannot be seen. Findings are capped at
   `MAX_FINDINGS = 60` per file.
 - `QUAL003` — builtin `open()` without `encoding=` (binary modes and the positional
   4th-argument `encoding` form, `open('f', 'w', -1, 'utf-8')`, are exempt); the builtin
@@ -330,8 +345,10 @@ The README states each of these plainly.
   not a proof.
 - The AST pass covers Python. The other four languages get the tokenizer and semantic
   passes only.
-- The AST pass's HTTP-timeout check does not track dotted module calls or a bare
-  `from requests import get` followed by `get(url)`; calls with `**kwargs` or a `*args`
+- The AST pass's HTTP-timeout check tracks dotted calls only when import provenance
+  resolves the root (`from requests import api`, `import requests as rq`,
+  `from requests import *`); a bare `from requests import get` followed by `get(url)`
+  is untracked by design; calls with `**kwargs` or a `*args`
   positional argument are skipped because the timeout flag cannot be seen. PY001 is a
   medium-confidence token heuristic, not a proof — an authorization check phrased
   without an auth-flavored token is missed.
