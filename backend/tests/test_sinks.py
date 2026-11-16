@@ -121,3 +121,9 @@ def test_suffixed_crypto_instances_fire():
         code = f'Cipher.getInstance("{algo}");\n'
         findings = detect_semantic_patterns(code, "java")
         assert not any(f["rule_id"] in ("SEC013", "SEC014") for f in findings), algo
+
+
+def test_trust_manager_word_boundary_does_not_match_suffixed_names():
+    code = "private void recheckServerTrusted(X509Certificate[] chain, String authType) {\n}\n"
+    findings = detect_semantic_patterns(code, "java")
+    assert all(f["rule_id"] != "SEC016" for f in findings)

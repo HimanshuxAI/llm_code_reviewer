@@ -62,7 +62,7 @@ SEMANTIC_RULES = [
                  "XMLDecoder deserialises arbitrary objects and allows remote code execution.",
                  "Use a strict XML parser or JSON with schema validation.", frozenset({"java"})),
     SemanticRule("SEC016", "Custom TrustManager method implemented", "medium",
-                 re.compile(r"(?:void|public|private|protected|override|final)[\w\s]{0,40}check(?:Client|Server)Trusted\s*\(", re.I),
+                 re.compile(r"\b(?:void|public|private|protected|override|final)[\w\s]{0,40}\bcheck(?:Client|Server)Trusted\s*\(", re.I),
                  "A custom X509 trust manager is defined. Trust-all managers defeat TLS certificate validation; even validating managers are easy to get wrong (hostname checks, pins, default validation).",
                  "Prefer the platform default trust manager. If you keep the custom one, verify the body rejects unknown certificates and pins hostnames, and never accept all certificates.", frozenset({"java"})),
     SemanticRule("JS001", "document.write()", "medium",
