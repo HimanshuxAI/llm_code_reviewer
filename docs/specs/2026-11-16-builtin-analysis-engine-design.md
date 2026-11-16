@@ -132,15 +132,21 @@ does not match its keyword list. The new detector catches it.
 
 ### AST analysis
 
-Python only, using the standard library `ast` module.
+Python only, using the standard library `ast` module. Implemented rules:
 
-- Mutable default argument, `def f(items=[])`
-- `assert` used for an authorization check
-- `except: pass` and `except Exception: pass`
-- Missing `timeout=` on a `requests` or `httpx` call
-- `open()` without `encoding=`
-- A name that shadows a Python builtin
-- `global` declared inside a function
+- `BUG001` — mutable default argument, `def f(items=[])`
+- `PY001` — `assert` used for an authorization check
+- `QUAL002` — broad except swallowing everything (reports named broad exceptions like
+  `except Exception: pass`; bare `except:` stays with the regex rule `QUAL001`)
+- `PY002` — HTTP call without a timeout, firing only on calls whose root object is clearly
+  an HTTP client (`requests.get(...)`, `httpx.post(...)`, or any variable assigned from
+  `requests.Session()` / `httpx.Client()` / `httpx.AsyncClient()`); plain dict `.get()`
+  methods are never flagged
+- `QUAL003` — `open()` without `encoding=` (binary modes are exempt)
+
+Python-specific rules use the `PY` namespace so they do not collide with the shared
+`SEC` IDs used by the Java semantic rules. `BUG001`, `PY001`, `PY002` find concrete
+bugs and have no cross-language analogues.
 
 Every check must have a false-positive test. A tool that cries wolf gets ignored.
 

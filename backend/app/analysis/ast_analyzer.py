@@ -5,6 +5,9 @@ AUTH_WORDS = ("admin", "auth", "permission", "role", "is_", "user")
 
 BROAD_EXCEPTIONS = frozenset({"Exception", "BaseException"})
 
+HTTP_METHODS = {"get", "post", "put", "delete", "patch", "request", "head", "options"}
+HTTP_MODULES = {"requests", "httpx"}
+
 
 def _call_name(node):
     func = node.func
@@ -30,6 +33,46 @@ def _is_broad_handler(type_node):
     return False
 
 
+def _http_client_names(tree):
+    """Names assigned from an HTTP client constructor (s = requests.Session())."""
+    names = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        target = node.targets[0]
+        value = node.value
+        if not isinstance(target, ast.Name):
+            continue
+        if not (isinstance(value, ast.Call) and isinstance(value.func, ast.Attribute)):
+            continue
+        if value.func.attr not in {"Session", "Client", "AsyncClient"}:
+            continue
+        base = value.func.value
+        base_id = getattr(base, "id", None) or getattr(base, "attr", "")
+        if base_id in HTTP_MODULES:
+            names.add(target.id)
+    return names
+
+
+def _looks_like_http_call(node, client_names):
+    """Direct requests.get(...) / httpx.post(...) or s.get(...) for an HTTP client s.
+
+    Deliberately narrow: a bare .get()/.post() on an unrelated object (dicts,
+    caches) is NOT an HTTP call and must not be flagged.
+    """
+    func = node.func
+    if not isinstance(func, ast.Attribute):
+        return False
+    if func.attr not in HTTP_METHODS:
+        return False
+    base = func.value
+    if isinstance(base, ast.Name):
+        return base.id in HTTP_MODULES or base.id in client_names
+    if isinstance(base, ast.Attribute):
+        return base.attr in HTTP_MODULES
+    return False
+
+
 def _mode_value(node):
     # open() accepts the mode positionally or as a keyword; binary modes do
     # not need an encoding.
@@ -48,6 +91,7 @@ def analyse_python(source_code: str) -> list[dict]:
         return []
 
     findings = []
+    client_names = _http_client_names(tree)
 
     def add(rule_id, title, severity, lineno, explanation, suggestion, evidence):
         findings.append({
@@ -76,7 +120,7 @@ def analyse_python(source_code: str) -> list[dict]:
         elif isinstance(node, ast.Assert):
             test_str = ast.unparse(node.test) if hasattr(ast, "unparse") else ""
             if any(word in test_str.lower() for word in AUTH_WORDS):
-                add("SEC014", "assert used for an authorization check", "medium",
+                add("PY001", "assert used for an authorization check", "medium",
                     node.lineno,
                     "assert is stripped when Python runs with -O, so authorization is silently skipped.",
                     "Raise PermissionError explicitly instead.",
@@ -94,9 +138,8 @@ def analyse_python(source_code: str) -> list[dict]:
         elif isinstance(node, ast.Call):
             name = _call_name(node)
             kw = {k.arg for k in node.keywords}
-            if name in {"get", "post", "put", "delete", "patch", "request"} and \
-               node.keywords is not None and "timeout" not in kw:
-                add("SEC015", "HTTP call without a timeout", "medium",
+            if _looks_like_http_call(node, client_names) and "timeout" not in kw:
+                add("PY002", "HTTP call without a timeout", "medium",
                     node.lineno,
                     "requests/httpx calls wait forever when the server stops responding.",
                     "Pass timeout=10 or similar on every HTTP call.",
