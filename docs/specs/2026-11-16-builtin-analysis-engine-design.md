@@ -178,12 +178,17 @@ Python only, using the standard library `ast` module. Implemented rules:
   innermost frame outwards and the nearest frame with a registration or a tombstone
   wins, so `s = requests.Session()` at module level followed by `s = {}` inside a
   function is never flagged, and `self.client = {}` in one method clears the binding
-  for sibling methods as well. Tombstones are written by every binding form:
-  parameters, comprehension targets, `for` targets, and non-client `with` bindings
-  all shadow an outer client within their scope. `with`/`async with` bindings live in
-  a transient frame
-  that is discarded at the end of the block, so a closed client is never flagged
-  afterwards. Calls carrying `**kwargs` or a `*args` positional argument are skipped,
+  for sibling methods as well. Tombstones are written by every binding form, and all
+  of them shadow an outer client within their scope: assignment (including tuple,
+  starred and chained targets), annotated assignment, `for`/`async for` targets
+  (including unpackings), comprehension targets, `with`/`async with` bindings,
+  `except ... as` names, lambda parameters, and walrus targets (`(s := ...)` binds
+  in the current frame and persists, treated as an assignment). Comprehension
+  targets, `with`/`async with` bindings, `except ... as` names and lambda parameters
+  live in transient frames that are discarded at the end of their construct, so a
+  closed or rebound client is never flagged afterwards — and a comprehension's
+  target tombstones never unflag the rest of the enclosing scope. Calls carrying
+  `**kwargs` or a `*args` positional argument are skipped,
   because the timeout flag cannot be seen. Findings are capped at
   `MAX_FINDINGS = 60` per file.
 - `QUAL003` — builtin `open()` without `encoding=` (binary modes and the positional

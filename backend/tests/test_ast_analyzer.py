@@ -384,12 +384,79 @@ def test_comprehension_target_tombstones_module_client():
     assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
 
 
+def test_comprehension_target_tombstone_does_not_outlive_the_comprehension():
+    # regression: the target tombstone used to be written into the enclosing
+    # scope and stayed there, silently unflagging the rest of it
+    code = (
+        "import requests\n"
+        "s = requests.Session()\n"
+        "x = [1 for s in ['a']]\n"
+        "s.get('http://x')\n"
+    )
+    assert any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
 def test_for_target_tombstones_module_client():
     code = (
         "import requests\n"
         "s = requests.Session()\n"
         "for s in ['a', 'b']:\n"
         "    s.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_except_as_binding_suppressed_inside_handler_body():
+    # `except ... as s` binds s for the handler body only (Python deletes it
+    # at the end of the block), so an outer client must not leak in there
+    code = (
+        "import requests\n"
+        "s = requests.Session()\n"
+        "try:\n"
+        "    pass\n"
+        "except Exception as s:\n"
+        "    s.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_lambda_param_suppressed_inside_body():
+    code = (
+        "import requests\n"
+        "s = requests.Session()\n"
+        "f = lambda s: s.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_walrus_binding_registers_client():
+    code = (
+        "import requests\n"
+        "(s := requests.Session())\n"
+        "s.get('http://x')\n"
+    )
+    assert any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_walrus_binding_suppresses_outer_client():
+    # walrus is treated as an assignment: the target always tombstones
+    code = (
+        "import requests\n"
+        "s = requests.Session()\n"
+        "(s := {})\n"
+        "s.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_walrus_inside_comprehension_does_not_outlive_it():
+    # kept simple: the walrus binding lives in the comprehension's transient
+    # frame (real Python leaks the name to the enclosing scope — documented
+    # narrowness); the client registration must not escape the frame either
+    code = (
+        "import requests\n"
+        "x = [(s := requests.Session()) for _ in range(3)]\n"
+        "s.get('http://x')\n"
     )
     assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
 

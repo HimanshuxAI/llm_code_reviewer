@@ -116,7 +116,8 @@ def _is_broad_handler(type_node):
 class _Frame:
     # kind: "module" for the persistent file frame, "class" for the persistent
     # class-body frame shared by all methods, "function" for transient
-    # function/method frames, "with" for transient with-block frames
+    # function/method frames, "with" for transient frames discarded without
+    # merging (with-blocks, comprehensions, except handlers, lambda bodies)
     def __init__(self, kind):
         self.kind = kind
         self.reg = set()
@@ -196,6 +197,16 @@ class _Checker(ast.NodeVisitor):
     def visit_AsyncFunctionDef(self, node):
         self.visit_FunctionDef(node)
 
+    def visit_Lambda(self, node):
+        # lambda parameters bind only within the lambda body: a transient
+        # frame (discarded without merging, like with-blocks) shadows an
+        # outer client of the same name inside the body
+        self._open_scope("with")
+        for name in _param_names(node):
+            self._unregister(name)
+        self.generic_visit(node)
+        self._close_scope()
+
     def visit_ClassDef(self, node):
         # one frame per class body, persisted while the class is visited, so
         # all methods of the class see the same registrations
@@ -223,6 +234,18 @@ class _Checker(ast.NodeVisitor):
                     self._register(key)
         self.generic_visit(node)
 
+    def visit_NamedExpr(self, node):
+        # walrus binds in the enclosing frame and the binding persists past
+        # the expression: treated as an assignment, the target always
+        # tombstones and registers when the value is a client constructor
+        keys = list(_binding_keys(node.target))
+        for key in keys:
+            self._unregister(key)
+        if _is_client_constructor(node.value, self.imported):
+            for key in keys:
+                self._register(key)
+        self.generic_visit(node)
+
     def visit_For(self, node):
         # loop targets bind names: tombstone so a same-named client binding
         # does not leak into the loop body
@@ -234,13 +257,18 @@ class _Checker(ast.NodeVisitor):
         self.visit_For(node)
 
     def _visit_comprehension(self, node):
-        # comprehension targets bind within the comprehension; the analyzer
-        # tombstones them in the enclosing scope, because the element and
-        # conditions are visited before the generators that bind them
+        # comprehension targets bind only within the comprehension: a
+        # transient with-style frame holds their tombstones and is discarded
+        # on exit, so the enclosing scope is never unflagged past the
+        # comprehension. Tombstones are pre-written because the element and
+        # the conditions are visited before the generators that bind them;
+        # that ordering stays valid because nothing escapes the frame.
+        self._open_scope("with")
         for gen in node.generators:
             for key in _binding_keys(gen.target):
                 self._unregister(key)
         self.generic_visit(node)
+        self._close_scope()
 
     def visit_ListComp(self, node): self._visit_comprehension(node)
     def visit_SetComp(self, node): self._visit_comprehension(node)
@@ -289,7 +317,14 @@ class _Checker(ast.NodeVisitor):
                       "Ignoring a broad exception with pass hides every error, including bugs you want to see.",
                       "Catch the specific exception types you expect, or remove the try.",
                       f"except {ast.unparse(node.type)}: pass")
+        # `except ... as name` binds the name for the handler body only
+        # (Python deletes it at the end of the block): a transient frame
+        # shadows an outer client of the same name inside the body
+        self._open_scope("with")
+        if node.name:
+            self._unregister(node.name)
         self.generic_visit(node)
+        self._close_scope()
 
     # http: registered clients (scope-aware via the frame stack; dotted keys
     # merge from function frames into a parent class frame on exit); also
