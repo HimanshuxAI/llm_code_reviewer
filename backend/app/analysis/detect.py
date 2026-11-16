@@ -5,7 +5,7 @@ _EXTENSION_MAP = {
 }
 
 _SIGNATURES = [
-    ("python", ("def ", "import ", "print(")),
+    ("python", ("def ", "import ", "print(", "eval(", "exec(", "os.system(", "input(")),
     ("c", ("#include", "int main(")),
     ("javascript", ("function ", "const ", "let ", "console.log(")),
     ("java", ("public class", "System.out")),
