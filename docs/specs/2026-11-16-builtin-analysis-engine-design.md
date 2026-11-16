@@ -134,19 +134,38 @@ does not match its keyword list. The new detector catches it.
 
 Python only, using the standard library `ast` module. Implemented rules:
 
-- `BUG001` — mutable default argument, `def f(items=[])`
-- `PY001` — `assert` used for an authorization check
+- `BUG001` — mutable default argument, `def f(items=[])`; reports the default's line
+- `PY001` — `assert` used for an authorization check. **Medium confidence**: keyword
+  matching is a heuristic. Identifiers are split into word-boundary tokens (snake_case
+  and camelCase aware) and matched against `admin`, `auth`, `permission`, `role`,
+  `staff`, `superuser`. `assert user.is_admin` fires; `assert is_valid(payload)`,
+  `assert len(users) > 0`, `assert 'author' in data`, `assert cfg.oauth_url`, and
+  `assert isinstance(u, User)` do not.
 - `QUAL002` — broad except swallowing everything (reports named broad exceptions like
-  `except Exception: pass`; bare `except:` stays with the regex rule `QUAL001`)
-- `PY002` — HTTP call without a timeout, firing only on calls whose root object is clearly
-  an HTTP client (`requests.get(...)`, `httpx.post(...)`, or any variable assigned from
-  `requests.Session()` / `httpx.Client()` / `httpx.AsyncClient()`); plain dict `.get()`
-  methods are never flagged
-- `QUAL003` — `open()` without `encoding=` (binary modes are exempt)
+  `except Exception: pass`, including `except (Exception, ValueError): pass`; bare
+  `except:` stays with the regex rule `QUAL001`)
+- `PY002` — HTTP call without a timeout. Fires on direct module calls (`requests.get(...)`,
+  `httpx.post(...)`) and on calls rooted at an HTTP client registered in the current
+  scope: assignments from `requests.Session()` / `httpx.Client()` / `httpx.AsyncClient()`
+  (including multi-target `a = b = requests.Session()`, annotated assignments, dotted
+  targets such as `self.client`, and the from-import forms `from requests import Session`
+  / `from httpx import Client`), plus `with`/`async with` bindings. Registration is
+  scope-aware: the checker walks the tree in source order with a scope stack, function
+  and class scopes receive a copy of the enclosing scope, and a non-client reassignment
+  (`self.client = {}`) clears the binding — a sibling function's dict `s.get('key')` is
+  never flagged. Calls carrying `**kwargs` are skipped, because the timeout flag cannot
+  be seen. Aliased imports (`import requests as rq`) and dotted module calls are not
+  tracked; a bare `from requests import get` followed by `get(url)` is not flagged.
+  Findings are capped at `MAX_FINDINGS = 60` per file.
+- `QUAL003` — builtin `open()` without `encoding=` (binary modes and the positional
+  4th-argument `encoding` form, `open('f', 'w', -1, 'utf-8')`, are exempt); the builtin
+  only — `os.open`, `tarfile.open`, `gzip.open`, `Path.open` never fire
 
 Python-specific rules use the `PY` namespace so they do not collide with the shared
-`SEC` IDs used by the Java semantic rules. `BUG001`, `PY001`, `PY002` find concrete
-bugs and have no cross-language analogues.
+`SEC` IDs used by the Java semantic rules. `BUG001` finds concrete bugs and has no
+cross-language analogues. `PY001` is a word-boundary token heuristic, not a proof, and it
+is the only AST rule that ships at medium confidence; the rest are registration- or
+shape-based and ship at high confidence.
 
 Every check must have a false-positive test. A tool that cries wolf gets ignored.
 
@@ -297,6 +316,11 @@ The README states each of these plainly.
   not a proof.
 - The AST pass covers Python. The other four languages get the tokenizer and semantic
   passes only.
+- The AST pass's HTTP-timeout check does not track aliased imports
+  (`import requests as rq`), dotted module calls, or a bare `from requests import get`
+  followed by `get(url)`; calls with `**kwargs` are skipped because the timeout flag
+  cannot be seen. PY001 is a medium-confidence token heuristic, not a proof — an
+  authorization check phrased without an auth-flavored token is missed.
 
 ## Deliverables
 
