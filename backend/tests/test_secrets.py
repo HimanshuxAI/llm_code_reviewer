@@ -109,3 +109,16 @@ def test_evidence_redacts_secret_in_trailing_comment():
         assert "AKIAIOSFODNN7EXAMPLE" not in body
         assert "AKIA" in f["evidence"]
         assert "x = 1" in f["evidence"]
+
+
+def test_form_feed_in_comment_does_not_crash():
+    # A form feed (\x0c) is a line boundary for str.splitlines() but not for
+    # the \n-only split used by the scanner; the two line models must agree.
+    src = 'x = 1 # comment\x0c api_key = "a8f3c2b1e9d4f6a7c5b8"\n'
+    findings = detect_secrets(src, "python")  # must not raise
+    assert all(f["line"] == 1 for f in findings)
+
+    # a purely commented-out line containing a form feed and a secret-looking
+    # literal is masked away and must not flag
+    pure = '# comment\x0c api_key = "a8f3c2b1e9d4f6a7c5b8"\n'
+    assert detect_secrets(pure, "python") == []

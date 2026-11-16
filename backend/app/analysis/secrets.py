@@ -115,14 +115,14 @@ def detect_secrets(source: str, language: str) -> list[dict]:
     from app.analysis.tokenizer import strip_comments
 
     masked = strip_comments(source, language)
-    masked_lines = masked.splitlines()
+    source_lines = source.split("\n")
+    masked_lines = masked.split("\n")
     findings = []
 
-    for lineno, line in enumerate(source.splitlines(), start=1):
-        # strip_comments preserves line counts, so this index is always valid.
+    for lineno, line in enumerate(source_lines, start=1):
         # Named-credential detection runs against the raw line by design:
         # the mask is used only to skip purely commented-out lines.
-        m_line = masked_lines[lineno - 1]
+        m_line = masked_lines[lineno - 1] if lineno <= len(masked_lines) else ""
         if m_line.strip() == "":
             continue  # purely a comment
 
