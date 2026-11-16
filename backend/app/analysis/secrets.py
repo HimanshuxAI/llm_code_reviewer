@@ -45,6 +45,41 @@ def _redacted(secret: str) -> str:
     return f"{secret[:4]}...({len(secret)} chars)"
 
 
+def _redact_line(line: str) -> str:
+    """Redact every secret detected on a raw line, not just one.
+
+    Finds all KNOWN_PREFIXES regex matches and the named-credential value
+    match (same regexes used for detection) and replaces each with its
+    redacted form. Overlapping spans are resolved left-to-right, longest
+    first. Returns at most 200 chars.
+    """
+    spans = []  # (start, end, replacement)
+    for prefix, _title in KNOWN_PREFIXES:
+        regex = re.escape(prefix) + r"[A-Za-z0-9_\-\.]{4,}"
+        for mm in re.finditer(regex, line):
+            spans.append((mm.start(), mm.end(), _redacted(mm.group(0))))
+    m = CRED_NAME.search(line)
+    if m:
+        sm = STRING_RE.search(line)
+        if sm:
+            if sm.group(1) is not None:
+                vstart, vend, value = sm.start(1), sm.end(1), sm.group(1)
+            else:
+                vstart, vend, value = sm.start(2), sm.end(2), sm.group(2)
+            spans.append((vstart, vend, _redacted(value)))
+    spans.sort(key=lambda s: (s[0], -(s[1] - s[0])))
+    out = []
+    cursor = 0
+    for start, end, repl in spans:
+        if start < cursor:
+            continue  # overlaps a span already redacted
+        out.append(line[cursor:start])
+        out.append(repl)
+        cursor = end
+    out.append(line[cursor:])
+    return "".join(out).strip()[:200]
+
+
 def detect_secrets(source: str, language: str) -> list[dict]:
     from app.analysis.tokenizer import strip_comments
 
@@ -72,7 +107,7 @@ def detect_secrets(source: str, language: str) -> list[dict]:
                 seen.add(key)
                 findings.append(_finding(
                     "SECRET002", f"{title} ({prefix.strip()})",
-                    lineno, m_line, secret, "high"))
+                    lineno, line, secret, "high"))
 
         # 2) credential-style name assigned a high-entropy value
         m = CRED_NAME.search(line)
@@ -88,13 +123,13 @@ def detect_secrets(source: str, language: str) -> list[dict]:
                         seen.add(key)
                         findings.append(_finding(
                             "SECRET001", "Hardcoded credential",
-                            lineno, m_line, value, "high"))
+                            lineno, line, value, "high"))
 
     return findings[:60]
 
 
-def _finding(rule_id, title, lineno, m_line, secret, severity):
-    evidence = m_line.replace(secret, _redacted(secret)).strip()[:200]
+def _finding(rule_id, title, lineno, line, secret, severity):
+    evidence = _redact_line(line)
     return {
         "rule_id": rule_id,
         "title": title,

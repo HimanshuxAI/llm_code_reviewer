@@ -42,3 +42,33 @@ def test_flags_standalone_jwt():
     code = 'token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.signature"\n'
     findings = detect_secrets(code, "python")
     assert findings
+
+
+def test_evidence_redacts_all_secrets_on_the_line():
+    code = 'a = "AKIAIOSFODNN7EXAMPLE"; b = "ghp_1234567890abcdefghij"\n'
+    findings = detect_secrets(code, "python")
+    secret_findings = [f for f in findings if f["rule_id"] == "SECRET002"]
+    assert len(secret_findings) == 2
+    for f in findings:
+        body = " ".join(
+            f["title"] + f["explanation"] + f["suggestion"] + f["evidence"]
+        )
+        assert "AKIAIOSFODNN7EXAMPLE" not in body
+        assert "ghp_1234567890abcdefghij" not in body
+    # evidence is built from the raw line, so both redactions are visible
+    for f in secret_findings:
+        assert "AKIA" in f["evidence"]
+        assert "ghp_" in f["evidence"]
+
+
+def test_evidence_redacts_secret_in_trailing_comment():
+    code = "x = 1  # AKIAIOSFODNN7EXAMPLE\n"
+    findings = detect_secrets(code, "python")
+    assert findings
+    for f in findings:
+        body = " ".join(
+            f["title"] + f["explanation"] + f["suggestion"] + f["evidence"]
+        )
+        assert "AKIAIOSFODNN7EXAMPLE" not in body
+        assert "AKIA" in f["evidence"]
+        assert "x = 1" in f["evidence"]
