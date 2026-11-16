@@ -30,6 +30,43 @@ def test_ignores_comment():
     assert detect_secrets(code, "python") == []
 
 
+def test_two_credential_literals_on_one_line_are_all_detected_and_redacted():
+    code = 'token = "AKIAIOSFODNN7EXAMPLE" ; secret = "b9e4d3c2a1f5e6b7c8d9a0b1"\n'
+    findings = detect_secrets(code, "python")
+    rule_ids = [f["rule_id"] for f in findings]
+    # the AWS prefix literal yields SECRET002; the named high-entropy
+    # literal yields SECRET001 — both must be found
+    assert "SECRET002" in rule_ids
+    assert "SECRET001" in rule_ids
+    for f in findings:
+        body = " ".join(
+            f["title"] + f["explanation"] + f["suggestion"] + f["evidence"]
+        )
+        assert "AKIAIOSFODNN7EXAMPLE" not in body
+        assert "b9e4d3c2a1f5e6b7c8d9a0b1" not in body
+
+
+def test_comment_region_credential_is_flagged():
+    # detection runs on raw source by design: commented-out secrets still leak
+    code = 'x = 1  # api_key = "a8f3c2b1e9d4f6a7c5b8"\n'
+    findings = detect_secrets(code, "python")
+    assert any(f["rule_id"] == "SECRET001" for f in findings)
+
+
+def test_evidence_is_truncated_to_200_chars():
+    code = 'AWS_KEY = "AKIAIOSFODNN7EXAMPLE"' + "  # padding padding padding" * 20 + "\n"
+    findings = detect_secrets(code, "python")
+    assert findings
+    for f in findings:
+        assert len(f["evidence"]) <= 200
+
+
+def test_findings_cap_at_60():
+    code = "".join(f'AWS_KEY_{i} = "AKIAIOSFODNN7EXAMPLE"\n' for i in range(70))
+    findings = detect_secrets(code, "python")
+    assert len(findings) == 60
+
+
 def test_secret_is_redacted_in_output():
     code = 'AWS_KEY = "AKIAIOSFODNN7EXAMPLE"\n'
     findings = detect_secrets(code, "python")

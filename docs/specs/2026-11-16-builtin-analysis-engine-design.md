@@ -123,6 +123,10 @@ blocks and `.pem`/`.key`/`id_rsa` file references.
 **Redaction.** A finding never echoes the full secret. The explanation shows the first four
 characters and the length.
 
+**Exception.** `pk_live_` is Stripe's publishable key, which is public by design. It is
+reported at low severity with the title "Stripe publishable key (not a secret)" — a signal
+that the sibling secret key may be nearby or committed — not as a credential leak.
+
 The current scanner misses `AWS_KEY = "AKIAIOSFODNN7EXAMPLE"` because the variable name
 does not match its keyword list. The new detector catches it.
 
