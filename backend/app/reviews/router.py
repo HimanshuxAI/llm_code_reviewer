@@ -5,7 +5,7 @@ from app.analysis.pipeline import run_review
 from app.auth.dependencies import get_current_user
 from app.db.models import Review, User
 from app.db.session import get_db
-from app.reviews.schemas import ReviewCreate, ReviewOut, ReviewSummary
+from app.reviews.schemas import ReviewCreate, ReviewDetail, ReviewOut, ReviewSummary
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 
@@ -42,7 +42,7 @@ def list_reviews(
     )
 
 
-@router.get("/{review_id}", response_model=ReviewOut)
+@router.get("/{review_id}", response_model=ReviewDetail)
 def get_review(
     review_id: int,
     user: User = Depends(get_current_user),

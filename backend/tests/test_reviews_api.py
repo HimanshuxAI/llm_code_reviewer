@@ -47,3 +47,28 @@ def test_get_single_review(client, auth_headers):
     assert resp.status_code == 200
     assert resp.json()["language"] == "python"
     assert resp.json()["score"] < 100
+
+
+def test_get_single_review_returns_source_code(client, auth_headers):
+    """The results page renders the submitted code in an editor pane.
+
+    Without source_code in the response the frontend crashes on
+    review.source_code.split() and renders a blank page.
+    """
+    created = client.post(
+        "/api/reviews", json={"source_code": VULNERABLE}, headers=auth_headers
+    ).json()
+    resp = client.get(f"/api/reviews/{created['id']}", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "source_code" in body
+    assert body["source_code"] == VULNERABLE
+    assert len(body["findings"]) == 2
+
+
+def test_list_reviews_does_not_return_source_code(client, auth_headers):
+    """History stays light — only the detail view carries the code."""
+    client.post("/api/reviews", json={"source_code": VULNERABLE}, headers=auth_headers)
+    resp = client.get("/api/reviews", headers=auth_headers)
+    assert resp.status_code == 200
+    assert "source_code" not in resp.json()[0]

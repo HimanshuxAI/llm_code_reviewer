@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from app.auth.security import create_access_token, hash_password, verify_password
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 class RegisterIn(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8, max_length=128)
 
 
 class LoginIn(BaseModel):

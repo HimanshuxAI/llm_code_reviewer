@@ -15,6 +15,12 @@ def test_register_invalid_email_rejected(client):
     assert resp.status_code == 422
 
 
+def test_register_short_password_rejected(client):
+    """The signup form requires 8+ characters; the API must enforce it too."""
+    resp = client.post("/api/auth/register", json={"email": "short@b.com", "password": "short"})
+    assert resp.status_code == 422
+
+
 def test_login_returns_token(client):
     client.post("/api/auth/register", json={"email": "a@b.com", "password": "longenough1"})
     resp = client.post("/api/auth/login", json={"email": "a@b.com", "password": "longenough1"})

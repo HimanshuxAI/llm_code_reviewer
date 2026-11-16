@@ -1098,6 +1098,9 @@ button {
   display: grid;
   grid-template-columns: 52px 210px 1fr 320px;
   grid-template-rows: 1fr 26px;
+  grid-template-areas:
+    "rail tree main inspector"
+    "rail status status status";
   height: 100vh;
   overflow: hidden;
   background: var(--bg);
@@ -1105,19 +1108,47 @@ button {
 
 .ide.no-tree {
   grid-template-columns: 52px 1fr 320px;
+  grid-template-areas:
+    "rail main inspector"
+    "rail status status";
 }
 
 .ide.no-inspector {
   grid-template-columns: 52px 210px 1fr;
+  grid-template-areas:
+    "rail tree main"
+    "rail status status";
 }
 
 .ide.only-main {
   grid-template-columns: 52px 1fr;
+  grid-template-areas:
+    "rail main"
+    "rail status";
+}
+
+.ide > .rail {
+  grid-area: rail;
+}
+
+.ide > .tree {
+  grid-area: tree;
+}
+
+.ide > .ide-main {
+  grid-area: main;
+}
+
+.ide > .inspector {
+  grid-area: inspector;
+}
+
+.ide > .statusbar {
+  grid-area: status;
 }
 
 /* Activity rail */
 .rail {
-  grid-row: 1 / -1;
   background: var(--ink);
   display: flex;
   flex-direction: column;
@@ -1183,7 +1214,6 @@ button {
 
 /* File tree */
 .tree {
-  grid-row: 1 / 2;
   background: #f7f3ec;
   border-right: 1px solid var(--line);
   overflow-y: auto;
@@ -1264,7 +1294,6 @@ button {
 
 /* Editor pane */
 .ide-main {
-  grid-row: 1 / 2;
   display: flex;
   flex-direction: column;
   background: var(--paper);
@@ -1375,7 +1404,6 @@ button {
 
 /* Inspector */
 .inspector {
-  grid-row: 1 / 2;
   background: var(--paper);
   border-left: 1px solid var(--line);
   overflow-y: auto;
@@ -1470,8 +1498,6 @@ button {
 
 /* Status bar */
 .statusbar {
-  grid-column: 2 / -1;
-  grid-row: 2 / 3;
   background: var(--ink);
   color: #c9bdb1;
   display: flex;
@@ -1501,14 +1527,39 @@ button {
 }
 
 @media (max-width: 1100px) {
-  .ide {
+  .ide,
+  .ide.no-tree,
+  .ide.no-inspector,
+  .ide.only-main {
     grid-template-columns: 52px 1fr;
   }
-  .tree,
-  .inspector {
+
+  /* The inspector holds the "Run review" action and the findings list, so it
+     must stay reachable. Below this width it becomes a bottom drawer under
+     the editor instead of a side panel. */
+  .ide,
+  .ide.no-tree {
+    grid-template-rows: 1fr minmax(190px, 34vh) 26px;
+    grid-template-areas:
+      "rail main"
+      "rail inspector"
+      "rail status";
+  }
+
+  .ide.no-inspector,
+  .ide.only-main {
+    grid-template-rows: 1fr 26px;
+    grid-template-areas:
+      "rail main"
+      "rail status";
+  }
+
+  .ide > .tree {
     display: none;
   }
-  .statusbar {
-    grid-column: 2 / -1;
+
+  .ide > .inspector {
+    border-left: none;
+    border-top: 1px solid var(--line);
   }
 }

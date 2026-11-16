@@ -27,6 +27,13 @@ class ReviewOut(BaseModel):
     created_at: datetime
 
 
+class ReviewDetail(ReviewOut):
+    """Single-review view. Includes the submitted source so the client can
+    render it in the editor pane alongside the findings."""
+
+    source_code: str
+
+
 class ReviewSummary(BaseModel):
     id: int
     language: str

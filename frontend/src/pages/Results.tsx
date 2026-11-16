@@ -54,7 +54,8 @@ export default function Results() {
     );
   }
 
-  const lines = review.source_code.split("\n");
+  const source = review.source_code ?? "";
+  const lines = source.split("\n");
   const flagged = new Set(review.findings.map((f) => f.line));
   const criticalCount = review.findings.filter((f) => f.severity === "critical").length;
   const warnCount = review.findings.filter(
@@ -142,7 +143,7 @@ export default function Results() {
           ))}
         </div>
         <div className="ide-code">
-          <pre>{review.source_code}</pre>
+          <pre>{source}</pre>
         </div>
       </div>
     </Workspace>
