@@ -1,4 +1,3 @@
-# backend/app/analysis/taint.py
 """Two-phase interprocedural taint analysis.
 
 Phase 1 (bottom-up): for each function compute which parameters can reach a
@@ -227,3 +226,256 @@ def analyse_taint(source_code: str, language: str) -> list[dict]:
     if language in ("javascript", "java", "c", "cpp"):
         return _token_analyse(source_code, language)
     return []
+
+
+def _find_stmt_end(tokens, i):
+    depth = 0
+    for k in range(i, len(tokens)):
+        t = tokens[k].text
+        if t in "([{":
+            depth += 1
+        elif t in ")]}":
+            if depth == 0:
+                return k
+            depth -= 1
+        elif t == ";" and depth == 0:
+            return k
+    return len(tokens)
+
+
+def _find_call(tokens, i):
+    if tokens[i].kind != "identifier":
+        return None
+    if i + 1 >= len(tokens) or tokens[i + 1].text != "(":
+        return None
+    depth = 1
+    j = i + 2
+    while j < len(tokens) and depth:
+        t = tokens[j].text
+        if t == "(":
+            depth += 1
+        elif t == ")":
+            depth -= 1
+        j += 1
+    return (tokens[i].text, i + 2, j - 1)
+
+
+def _split_args(tokens, a, b):
+    parts, start, depth = [], a, 0
+    for k in range(a, b):
+        t = tokens[k].text
+        if t in "([{":
+            depth += 1
+        elif t in ")]}":
+            depth -= 1
+        elif t == "," and depth == 0:
+            parts.append((start, k))
+            start = k + 1
+    parts.append((start, b))
+    return parts
+
+
+def _expr_has_tainted(tokens, a, b, tainted_map):
+    for t in tokens[a:b]:
+        if t.kind != "identifier":
+            continue
+        if t.text in BARE_SOURCES:
+            return True
+        if tainted_map.get(t.text):
+            return True
+    return False
+
+
+def _phase1_tokens(func, sources, sinks, functions):
+    tokens = func.body
+    prov = {p: {i} for i, p in enumerate(func.params)}
+    for _ in range(8):
+        for i, tok in enumerate(tokens):
+            if tok.kind != "identifier":
+                continue
+            if i + 1 < len(tokens) and tokens[i + 1].text == "=":
+                end = _find_stmt_end(tokens, i + 2)
+                union = set()
+                found_source = False
+                for k in range(i + 2, end):
+                    t = tokens[k]
+                    if t.kind == "identifier":
+                        if t.text in prov:
+                            union |= prov[t.text]
+                        if t.text in sources:
+                            found_source = True
+                        if t.text in BARE_SOURCES:
+                            found_source = True
+                if found_source:
+                    func.source_locals.add(tok.text)
+                prov[tok.text] = union
+        # return values
+        for j, tok in enumerate(tokens):
+            if tok.text == "return":
+                end = _find_stmt_end(tokens, j + 1)
+                union = set()
+                for t in tokens[j + 1:end]:
+                    if t.kind == "identifier" and t.text in prov:
+                        union |= prov[t.text]
+                if union:
+                    func.flows_to_return |= union
+        # sinks and output sources
+        i = 0
+        while i < len(tokens):
+            call = _find_call(tokens, i)
+            if call:
+                callee, a, b = call
+                if callee in OUTPUT_SOURCES:
+                    for ta, tb in _split_args(tokens, a, b):
+                        if tb - ta == 1 and tokens[ta].kind == "identifier":
+                            func.source_locals.add(tokens[ta].text)
+                if callee in sinks:
+                    union = set()
+                    for ta, tb in _split_args(tokens, a, b):
+                        for t in tokens[ta:tb]:
+                            if t.kind == "identifier" and t.text in prov:
+                                union |= prov[t.text]
+                    func.flows_to_sink |= union
+                i = b
+            else:
+                i += 1
+
+
+def _phase2_tokens(functions, sources, sinks, language):
+    tainted_params = {name: set() for name in functions}
+    tainted_returns = set()
+    findings = []
+    reported = set()
+
+    for _ in range(20):
+        changed = False
+        for name, func in functions.items():
+            tokens = func.body
+            tainted_map = {p: (i in tainted_params[name]) for i, p in enumerate(func.params)}
+            for src in func.source_locals:
+                tainted_map[src] = True
+
+            def taint_expr(a, b):
+                for j in range(a, b):
+                    if tokens[j].kind == "identifier" and tokens[j].text in BARE_SOURCES:
+                        return True
+                if _expr_has_tainted(tokens, a, b, tainted_map):
+                    return True
+                for j in range(a, b):
+                    t = tokens[j]
+                    if t.kind == "identifier":
+                        call = _find_call(tokens, j)
+                        if call:
+                            callee, ca, cb = call
+                            if callee in sources:
+                                return True
+                            if callee in functions and callee in tainted_returns:
+                                for ta, tb in _split_args(tokens, ca, cb):
+                                    if _expr_has_tainted(tokens, ta, tb, tainted_map):
+                                        return True
+                return False
+
+            for j, tok in enumerate(tokens):
+                if tok.text == "return":
+                    end = _find_stmt_end(tokens, j + 1)
+                    if taint_expr(j + 1, end) and name not in tainted_returns:
+                        tainted_returns.add(name)
+                        changed = True
+            i = 0
+            while i < len(tokens):
+                tok = tokens[i]
+                if tok.kind == "identifier" and i + 1 < len(tokens) and tokens[i + 1].text == "=":
+                    start_expr = i + 2
+                    end = _find_stmt_end(tokens, start_expr)
+                    if taint_expr(start_expr, end):
+                        tainted_map[tok.text] = True
+                    i = end
+                    continue
+                call = _find_call(tokens, i)
+                if call:
+                    callee, a, b = call
+                    if callee in OUTPUT_SOURCES:
+                        for ta, tb in _split_args(tokens, a, b):
+                            if tb - ta == 1 and tokens[ta].kind == "identifier":
+                                tainted_map[tokens[ta].text] = True
+                        i = b
+                        continue
+                    if callee in sinks:
+                        hit = False
+                        for ta, tb in _split_args(tokens, a, b):
+                            if _expr_has_tainted(tokens, ta, tb, tainted_map):
+                                hit = True
+                                break
+                        if hit:
+                            key = (name, tok.line)
+                            if key not in reported:
+                                reported.add(key)
+                                findings.append(_finding_token(tok, language))
+                    elif callee in functions:
+                        g = functions[callee]
+                        for idx, (ta, tb) in enumerate(_split_args(tokens, a, b)):
+                            if idx < len(g.params) and _expr_has_tainted(tokens, ta, tb, tainted_map):
+                                if idx not in tainted_params[callee]:
+                                    tainted_params[callee].add(idx)
+                                    changed = True
+                    i = b
+                else:
+                    i += 1
+        if not changed:
+            break
+    return findings
+
+
+def _finding_token(tok, language):
+    return {
+        "rule_id": "TAINT001",
+        "title": "Untrusted data reaches a dangerous call",
+        "severity": "high",
+        "line": tok.line,
+        "explanation": "Data from an untrusted source flows into a call that interprets it as code or a shell command.",
+        "suggestion": "Validate or escape the input, or use arguments as a list without a shell.",
+        "source": "taint",
+        "fixed_snippet": None,
+        "evidence": f"token {tok.text!r}",
+        "confidence": "medium",
+        "related_lines": [],
+    }
+
+
+def _token_analyse(source_code: str, language: str) -> list[dict]:
+    from app.analysis.tokens import function_inventory
+    functions = function_inventory(source_code, language)
+    if not functions:
+        return _intraprocedural(source_code, language)
+    sources = SOURCES.get(language, set())
+    sinks = SINKS.get(language, set())
+    for func in functions.values():
+        _phase1_tokens(func, sources, sinks, functions)
+    return _phase2_tokens(functions, sources, sinks, language)
+
+
+def _intraprocedural(source_code: str, language: str) -> list[dict]:
+    """Fallback when braces do not balance: source and sink in one function."""
+    from app.analysis.tokenizer import tokenize_source
+    tokens = tokenize_source(source_code, language)
+    sources = SOURCES.get(language, set())
+    sinks = SINKS.get(language, set())
+    source_lines = {t.line for t in tokens if t.kind == "identifier" and t.text in sources}
+    sink_lines = {t.line for t in tokens if t.kind == "identifier" and t.text in sinks}
+    findings = []
+    for line in sorted(sink_lines):
+        if any(abs(line - s) <= 40 for s in source_lines):
+            findings.append({
+                "rule_id": "TAINT001",
+                "title": "Untrusted data may reach a dangerous call",
+                "severity": "high",
+                "line": line,
+                "explanation": "Untrusted input and a dangerous call occur close together; the file could not be parsed into functions, so the analysis fell back to a proximity heuristic.",
+                "suggestion": "Check the dataflow manually; the tool flagged the suspicious pairing.",
+                "source": "taint",
+                "fixed_snippet": None,
+                "evidence": "",
+                "confidence": "medium",
+                "related_lines": sorted(source_lines),
+            })
+    return findings[:60]

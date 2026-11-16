@@ -1,4 +1,3 @@
-# backend/tests/test_taint.py
 from app.analysis.taint import analyse_taint
 
 
@@ -54,3 +53,37 @@ def test_confidence_is_high_for_direct_and_medium_for_cross_function():
 
 def test_parser_error_returns_empty_list():
     assert analyse_taint("def f(: pass\n", "python") == []
+
+
+def test_javascript_vulnerable():
+    code = 'function route(req) {\n  const name = req.query.name;\n  const cmd = name;\n  eval(cmd);\n}\n'
+    findings = analyse_taint(code, "javascript")
+    assert any(f["line"] == 4 for f in findings)
+
+
+def test_javascript_clean():
+    code = 'function add(a, b) {\n  return a + b;\n}\n'
+    assert analyse_taint(code, "javascript") == []
+
+
+def test_java_vulnerable():
+    code = 'void route(HttpServletRequest req) {\n  String name = req.getParameter("name");\n  Runtime.exec(name);\n}\n'
+    findings = analyse_taint(code, "java")
+    assert findings
+
+
+def test_c_vulnerable_argv():
+    code = 'int main(int argc, char **argv) {\n  system(argv[1]);\n  return 0;\n}\n'
+    findings = analyse_taint(code, "c")
+    assert findings
+
+
+def test_c_output_parameter_source():
+    code = 'void h() {\n  char buf[64];\n  gets(buf);\n  system(buf);\n}\n'
+    findings = analyse_taint(code, "c")
+    assert findings
+
+
+def test_c_clean():
+    code = 'int add(int a, int b) {\n  return a + b;\n}\n'
+    assert analyse_taint(code, "c") == []
