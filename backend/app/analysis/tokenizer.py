@@ -3,10 +3,17 @@
 Converts source into a token stream where every token carries its kind,
 text, line, and column. Python uses the stdlib `tokenize` module; the
 other languages share a small hand-written scanner.
+
+Known limitation: nested template-literal `${...}` expressions containing
+backticks are not supported. A backtick inside `${...}` terminates the
+template string early, matching the spec's accept-one-string design.
 """
 import io
+import logging
 import tokenize
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -20,10 +27,21 @@ class Token:
 _WS = " \t\r\n"
 
 LANG_CONFIG = {
-    "javascript": {"line": ("//",), "block": (("/*", "*/"),), "sq": "'", "dq": '"', "template": True},
-    "java":       {"line": ("//",), "block": (("/*", "*/"),), "sq": "'", "dq": '"', "template": False},
+    "javascript": {"line": ("//",), "block": (("/*", "*/"),), "sq": "'", "dq": '"', "template": True, "dollar": True},
+    "java":       {"line": ("//",), "block": (("/*", "*/"),), "sq": "'", "dq": '"', "template": False, "triple": True},
     "c":          {"line": ("//",), "block": (("/*", "*/"),), "sq": "'", "dq": '"', "template": False},
     "cpp":        {"line": ("//",), "block": (("/*", "*/"),), "sq": "'", "dq": '"', "template": False},
+}
+
+# F-string tokens exist only on interpreters with PEP 701 (Python 3.12+).
+# Resolve by name so older interpreters simply skip them.
+_FSTRING_TOKENS = {
+    v for v in (
+        getattr(tokenize, "FSTRING_START", -1),
+        getattr(tokenize, "FSTRING_MIDDLE", -1),
+        getattr(tokenize, "FSTRING_END", -1),
+    )
+    if v != -1
 }
 
 
@@ -31,8 +49,9 @@ def _scan_generic(source: str, cfg: dict) -> list[Token]:
     tokens: list[Token] = []
     i, n = 0, len(source)
     line, col = 1, 0
+    dollar = bool(cfg.get("dollar"))
 
-    def emit(kind, text, sl, sc):
+    def emit(kind: str, text: str, sl: int, sc: int) -> None:
         tokens.append(Token(kind, text, sl, sc))
 
     while i < n:
@@ -66,26 +85,32 @@ def _scan_generic(source: str, cfg: dict) -> list[Token]:
                     i = end + len(close_m)
                     break
             else:
-                # strings (single quote, double quote, backtick)
+                # strings (single quote, double quote, backtick, triple-quoted)
                 quote = None
-                if ch in (cfg["sq"], cfg["dq"]):
+                triple = False
+                if cfg.get("triple") and ch == '"' and source.startswith('"""', i):
+                    quote = '"'
+                    triple = True
+                elif ch in (cfg["sq"], cfg["dq"]):
                     quote = ch
                 elif cfg.get("template") and ch == "`":
                     quote = "`"
                 if quote:
                     start_line, start_col = line, col
-                    j = i + 1
+                    opener = '"""' if triple else quote
+                    closer = '"""' if triple else quote
+                    j = i + len(opener)
                     while j < n:
                         c = source[j]
                         if c == "\\":
                             j += 2
                             continue
-                        if c == "\n" and quote != "`":
+                        if c == "\n" and quote != "`" and not triple:
                             break
-                        if c == quote:
+                        if source.startswith(closer, j):
                             break
                         j += 1
-                    end = j + 1 if j < n and source[j] == quote else j
+                    end = j + len(closer) if j < n and source.startswith(closer, j) else j
                     text = source[i:end]
                     nl = text.count("\n")
                     if nl:
@@ -100,17 +125,24 @@ def _scan_generic(source: str, cfg: dict) -> list[Token]:
                 if ch.isdigit():
                     start_col = col
                     j = i
-                    while j < n and (source[j].isalnum() or source[j] in "._xXbBoO"):
-                        j += 1
+                    while j < n:
+                        c = source[j]
+                        if c.isalnum() or c == "_":
+                            j += 1
+                        elif c == "." and j + 1 < n and source[j + 1].isdigit():
+                            j += 1
+                        else:
+                            break
                     emit("number", source[i:j], line, start_col)
                     col += j - i
                     i = j
                     continue
 
-                if ch.isalpha() or ch == "_":
+                if ch.isalpha() or ch == "_" or (dollar and ch == "$"):
                     start_col = col
                     j = i
-                    while j < n and (source[j].isalnum() or source[j] == "_"):
+                    while j < n and (source[j].isalnum() or source[j] == "_"
+                                     or (dollar and source[j] == "$")):
                         j += 1
                     emit("identifier", source[i:j], line, start_col)
                     col += j - i
@@ -143,7 +175,7 @@ def tokenize_source(source: str, language: str) -> list[Token]:
                 t = tok.type
                 if t == tokenize.COMMENT:
                     kind = "comment"
-                elif t == tokenize.STRING:
+                elif t == tokenize.STRING or t in _FSTRING_TOKENS:
                     kind = "string"
                 elif t == tokenize.NUMBER:
                     kind = "number"
@@ -156,10 +188,13 @@ def tokenize_source(source: str, language: str) -> list[Token]:
                     kind = "code"
                 out.append(Token(kind, tok.string, tok.start[0], tok.start[1]))
         except Exception:
+            logger.warning("tokenize_source: failed to tokenize Python source; returning []",
+                           exc_info=True)
             return []
         return out
     cfg = LANG_CONFIG.get(language)
     if cfg is None:
+        logger.warning("tokenize_source: unsupported language %r; returning []", language)
         return []
     return _scan_generic(source, cfg)
 
@@ -169,10 +204,13 @@ def _blanked(source: str, tokens: list[Token], kinds: set[str]) -> str:
 
     Line structure is preserved so line numbers stay valid.
     """
-    lines = source.splitlines(keepends=True)
+    # Use the same line model as the scanner (\n only) so token line/col
+    # offsets line up with the source offsets computed here.
     starts = [0]
-    for ln in lines:
-        starts.append(starts[-1] + len(ln))
+    idx = source.find("\n")
+    while idx != -1:
+        starts.append(idx + 1)
+        idx = source.find("\n", idx + 1)
     chars = list(source)
     for tok in tokens:
         if tok.kind not in kinds:
