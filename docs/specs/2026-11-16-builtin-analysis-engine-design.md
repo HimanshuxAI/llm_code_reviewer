@@ -178,17 +178,26 @@ Python only, using the standard library `ast` module. Implemented rules:
   innermost frame outwards and the nearest frame with a registration or a tombstone
   wins, so `s = requests.Session()` at module level followed by `s = {}` inside a
   function is never flagged, and `self.client = {}` in one method clears the binding
-  for sibling methods as well. Tombstones are written by every binding form, and all
-  of them shadow an outer client within their scope: assignment (including tuple,
-  starred and chained targets), annotated assignment, `for`/`async for` targets
-  (including unpackings), comprehension targets, `with`/`async with` bindings,
-  `except . Walrus bindings made inside a transient frame (comprehension, `with`, except handler, lambda) stay in that frame and do not escape it — real Python leaks a comprehension walrus to the enclosing scope; that case is a documented false negative... as` names, lambda parameters, and walrus targets (`(s := ...)` binds
-  in the current frame and persists, treated as an assignment). Comprehension
-  targets, `with`/`async with` bindings, `except ... as` names and lambda parameters
-  live in transient frames that are discarded at the end of their construct, so a
-  closed or rebound client is never flagged afterwards — and a comprehension's
-  target tombstones never unflag the rest of the enclosing scope. Calls carrying
-  `**kwargs` or a `*args` positional argument are skipped,
+  for sibling methods as well.
+
+  Tombstones are written by every binding form, and all of them shadow an outer
+  client within their scope: assignment (including tuple, starred and chained
+  targets), annotated assignment, function and method parameters, `for`/`async for`
+  targets (including unpackings), comprehension targets, `with`/`async with`
+  bindings, `except ... as` names, lambda parameters, and walrus targets
+  (`(s := ...)` binds in the current frame and persists, treated as an assignment).
+
+  Comprehension targets, `with`/`async with` bindings, `except ... as` names and
+  lambda parameters live in transient frames that are discarded at the end of their
+  construct, so a closed or rebound client is never flagged afterwards — and a
+  comprehension's target tombstones never unflag the rest of the enclosing scope.
+  A walrus binding made inside a transient frame stays in that frame and does not
+  escape it; real Python leaks a comprehension walrus to the enclosing scope, so
+  that case is a documented false negative. Registrations made inside a transient
+  frame also die with it — a client created inside an `except` handler or `with`
+  body is unflagged afterwards, the same false-negative direction.
+
+  Calls carrying `**kwargs` or a `*args` positional argument are skipped,
   because the timeout flag cannot be seen. Findings are capped at
   `MAX_FINDINGS = 60` per file.
 - `QUAL003` — builtin `open()` without `encoding=` (binary modes and the positional
