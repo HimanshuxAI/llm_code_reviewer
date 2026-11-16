@@ -61,6 +61,14 @@ def test_python_syntax_error_returns_empty_list():
     assert tokenize_source("def broken(:\n", "python") == []
 
 
+def test_python_syntax_error_logs_a_warning(caplog):
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="app.analysis.tokenizer"):
+        tokenize_source("def broken(:\n", "python")
+    assert any("tokenizer" in r.name for r in caplog.records)
+
+
 def test_unterminated_string_and_comment_do_not_crash():
     assert tokenize_source('const s = "unterminated\n', "javascript") is not None
     assert tokenize_source('/* unterminated block comment', "c") is not None

@@ -226,12 +226,21 @@ def _blanked(source: str, tokens: list[Token], kinds: set[str]) -> str:
 
 
 def strip_comments_and_strings(source: str, language: str) -> str:
-    """Mask comments and string contents. Line numbers preserved."""
+    """Mask comments and string contents. Line numbers preserved.
+
+    Fail-open contract: if the source cannot be parsed, the source is
+    returned unchanged so findings in the code remain visible. Callers
+    must treat the result as a best-effort mask, not a guarantee.
+    """
     tokens = tokenize_source(source, language)
     return _blanked(source, tokens, {"comment", "string"})
 
 
 def strip_comments(source: str, language: str) -> str:
-    """Mask comments only. Strings stay intact so crypto/pattern checks work."""
+    """Mask comments only. Strings stay intact so crypto/pattern checks work.
+
+    Fail-open contract: if the source cannot be parsed, the source is
+    returned unchanged (see strip_comments_and_strings).
+    """
     tokens = tokenize_source(source, language)
     return _blanked(source, tokens, {"comment"})
