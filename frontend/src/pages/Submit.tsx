@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { submitReview } from "../api";
 import { Upload, ArrowRight } from "lucide-react";
+import CodeEditor from "../components/CodeEditor";
 
 export default function Submit() {
   const [code, setCode] = useState("");
@@ -26,7 +27,7 @@ export default function Submit() {
     e.preventDefault();
     setError("");
     if (!code.trim()) {
-      setError("Please paste or upload some source code first.");
+      setError("Paste or upload some source code first.");
       return;
     }
     setLoading(true);
@@ -48,22 +49,22 @@ export default function Submit() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">New review</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Paste or upload source code. We&apos;ll scan it for bugs, security
-          issues, and quality problems.
+        <h1 className="text-2xl font-bold text-white">New review</h1>
+        <p className="mt-1 text-sm text-slate-400">
+          Paste or upload source code. We scan it for bugs, security issues, and
+          quality problems, then score it from 0 to 100.
         </p>
       </div>
 
-      <div className="panel p-6 shadow-sm space-y-4">
+      <div className="panel p-6 shadow-2xl space-y-4">
         <div className="flex items-center justify-between">
-          <label className="text-sm font-medium text-gray-700">Source code</label>
+          <label className="text-sm font-semibold text-slate-300">Source code</label>
           <button
             type="button"
             onClick={() => document.getElementById("file-input")?.click()}
-            className="btn-outline px-3 py-1.5 text-sm font-medium"
+            className="btn-outline px-3 py-1.5 text-xs font-medium"
           >
-            <Upload className="h-4 w-4 mr-2" /> Upload file
+            <Upload className="h-3 w-3 mr-1.5" /> Upload file
           </button>
           <input
             id="file-input"
@@ -73,34 +74,32 @@ export default function Submit() {
             onChange={handleFile}
           />
         </div>
-        <textarea
-          className="input w-full min-h-[240px] font-mono text-sm leading-relaxed"
-          placeholder="Paste your source code here..."
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          spellCheck={false}
-        />
+
+        <CodeEditor value={code} onChange={setCode} filename={filename} />
+
         {filename && (
-          <p className="text-xs text-gray-500">File: {filename}</p>
+          <p className="text-[10px] text-slate-500 font-mono">File: {filename}</p>
         )}
+
         {error && (
-          <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+          <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
             {error}
           </div>
         )}
+
         <button
           type="button"
           onClick={handleSubmit}
           disabled={loading || !code.trim()}
-          className="btn w-full"
+          className="btn w-full btn-primary"
         >
           <ArrowRight className="h-4 w-4 mr-2" /> Review code
         </button>
       </div>
 
-      <div className="text-sm text-gray-500">
-        Runs on your submissions only — static analysis is always on; LLM review
-        is used when an API key is configured.
+      <div className="text-[11px] text-slate-500 max-w-md">
+        Static analysis is always on. LLM review is used when an API key is
+        configured on the backend.
       </div>
     </div>
   );

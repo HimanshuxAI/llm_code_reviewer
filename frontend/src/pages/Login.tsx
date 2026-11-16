@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Link } from "react-router-dom";
 import { login } from "../api";
-import { Mail, Lock } from "lucide-react";
+import { Mail, Lock, ShieldCheck } from "lucide-react";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -32,21 +31,21 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full panel p-8 shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-black/50 px-4">
+      <div className="max-w-md w-full glass p-8 shadow-2xl">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Sign in</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Review your code securely. Enter your account below.
-          </p>
+          <div className="flex items-center gap-2 mb-3">
+            <ShieldCheck className="h-5 w-5 text-blue-400" />
+            <h1 className="text-xl font-bold text-white">Sign in</h1>
+          </div>
+          <p className="text-sm text-slate-400">Review your code securely. Enter your account below.</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
+
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email address
-            </label>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Email address</label>
             <div className="relative">
-              <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
               <input
                 type="email"
                 required
@@ -57,12 +56,11 @@ export default function Login() {
               />
             </div>
           </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Password</label>
             <div className="relative">
-              <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
               <input
                 type="password"
                 required
@@ -74,24 +72,25 @@ export default function Login() {
               />
             </div>
           </div>
+
           {error && (
-            <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+            <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
               {error}
             </div>
           )}
+
           <button
             type="submit"
             disabled={loading}
-            className="btn w-full"
+            className="btn w-full btn-primary"
           >
             {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
-        <p className="mt-6 text-center text-sm text-gray-600">
+
+        <p className="mt-8 text-center text-xs text-slate-500">
           Don't have an account?{" "}
-          <Link to="/register" className="font-medium text-blue-600 hover:underline">
-            Create one
-          </Link>
+          <a href="/register" className="text-blue-400 hover:underline ml-1">Create one</a>
         </p>
       </div>
     </div>

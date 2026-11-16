@@ -1,4 +1,10 @@
 import SeverityBadge from "./SeverityBadge";
+import { AlertTriangle, Zap, Code } from "lucide-react";
+
+const SOURCE_ICON: Record<string, React.ElementType> = {
+  static: Zap,
+  llm: AlertTriangle,
+};
 
 interface FindingCardProps {
   finding: {
@@ -14,35 +20,40 @@ interface FindingCardProps {
 }
 
 export default function FindingCard({ finding }: FindingCardProps) {
-  const sourceColor =
-    finding.source === "llm" ? "bg-blue-50 border-blue-100 text-blue-700" : "bg-gray-50 border-gray-100 text-gray-700";
+  const Icon = SOURCE_ICON[finding.source] || Code;
+  const isLlm = finding.source === "llm";
+
   return (
-    <div className="panel p-4 shadow-sm">
+    <article className="panel p-5 fade-in border-l-3 pl-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-          {finding.rule_id} &bull; line {finding.line}
-        </span>
-        <SeverityBadge severity={finding.severity} />
-        <span className={`text-xs px-2 py-0.5 rounded ${sourceColor}`}>
-          {finding.source === "llm" ? "AI review" : "Static scan"}
-        </span>
-      </div>
-      <h3 className="text-sm font-semibold text-gray-900 mb-1">{finding.title}</h3>
-      <p className="text-sm text-gray-700 mb-3">{finding.explanation}</p>
-      <div className="bg-white border border-gray-200 rounded-md p-3 mb-3">
-        <p className="text-xs font-medium text-gray-500 mb-1">Suggested fix</p>
-        <pre className="text-xs text-gray-900 font-mono overflow-x-auto whitespace-pre-wrap break-words">
-          {finding.suggestion}
-        </pre>
-      </div>
-      {finding.fixed_snippet && (
-        <div className="bg-green-50 border border-green-100 rounded-md p-3">
-          <p className="text-xs font-medium text-green-800 mb-1">Corrected snippet</p>
-          <pre className="text-xs text-green-900 font-mono overflow-x-auto whitespace-pre-wrap break-words">
-            {finding.fixed_snippet}
-          </pre>
+        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <Icon className={`h-3 w-3 ${isLlm ? "text-purple-400" : "text-blue-400"}`} />
+          <span>{finding.rule_id}</span>
+          <span>line {finding.line}</span>
         </div>
-      )}
-    </div>
+        <div className="flex items-center gap-2">
+          <SeverityBadge severity={finding.severity} />
+          <span className={`badge text-xs px-2 py-0.5 border ${isLlm ? "badge-llm" : "badge-static"}`}>
+            {finding.source === "llm" ? "AI review" : "Static scan"}
+          </span>
+        </div>
+      </div>
+
+      <h3 className="text-sm font-semibold text-white mb-1">{finding.title}</h3>
+      <p className="text-sm text-slate-300 mb-3 leading-relaxed">{finding.explanation}</p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-slate-900/50 border border-white/5 rounded-lg p-3">
+          <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">Suggested fix</p>
+          <pre className="text-xs font-mono text-slate-200 overflow-x-auto whitespace-pre-wrap break-words">{finding.suggestion}</pre>
+        </div>
+        {finding.fixed_snippet ? (
+          <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
+            <p className="text-[10px] font-semibold text-emerald-400 uppercase mb-1">Corrected snippet</p>
+            <pre className="text-xs font-mono text-emerald-100 overflow-x-auto whitespace-pre-wrap break-words">{finding.fixed_snippet}</pre>
+          </div>
+        ) : null}
+      </div>
+    </article>
   );
 }
