@@ -209,3 +209,98 @@ def test_except_tuple_with_broad_handler_still_fires():
 def test_duplicate_mutable_defaults_report_twice():
     code = "def f(a=[], b=[]):\n    return a\n"
     assert sum(f["rule_id"] == "BUG001" for f in analyse_python(code)) == 2
+
+
+def test_class_scope_init_registration_visible_in_sibling_method():
+    code = (
+        "import httpx\n"
+        "class C:\n"
+        "    def __init__(self): self.client = httpx.Client()\n"
+        "    def fetch(self):    self.client.get('http://x')\n"
+    )
+    findings = analyse_python(code)
+    assert any(f["rule_id"] == "PY002" for f in findings)
+
+
+def test_cross_method_reassignment_clears_binding_for_siblings():
+    code = (
+        "import httpx\n"
+        "class C:\n"
+        "    def __init__(self): self.client = httpx.Client()\n"
+        "    def reset(self):    self.client = {}\n"
+        "    def fetch(self):    self.client.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_module_level_client_shadowed_in_function_is_not_flagged():
+    code = (
+        "import requests\n"
+        "s = requests.Session()\n"
+        "def f():\n"
+        "    s = {}\n"
+        "    s.get('k')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_module_level_client_shadowed_by_annotated_assignment_is_not_flagged():
+    code = (
+        "import requests\n"
+        "s = requests.Session()\n"
+        "def f():\n"
+        "    s: dict = {}\n"
+        "    s.get('k')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_unrelated_session_source_is_not_flagged():
+    # false positive guard: sqlalchemy's Session is not an HTTP client
+    code = (
+        "from sqlalchemy.orm import Session\n"
+        "s = Session()\n"
+        "s.get(1)\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_from_httpx_import_client_is_flagged():
+    code = "from httpx import Client\nc = Client()\nc.get('http://x')\n"
+    assert any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_aliased_requests_import_call_is_flagged():
+    code = "import requests as rq\nrq.get('http://x')\n"
+    assert any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_aliased_constructor_call_is_flagged():
+    code = "import requests as rq\ns = rq.Session()\ns.get('http://x')\n"
+    assert any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_with_binding_does_not_outlive_the_block():
+    code = (
+        "import requests\n"
+        "with requests.Session() as s:\n"
+        "    pass\n"
+        "s.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_async_with_binding_does_not_outlive_the_block():
+    code = (
+        "import httpx\n"
+        "async def f():\n"
+        "    async with httpx.AsyncClient() as c:\n"
+        "        pass\n"
+        "    c.get('http://x')\n"
+    )
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_starred_args_skip_timeout_check():
+    code = "import requests\nargs = ()\nrequests.get('http://x', *args)\n"
+    assert not any(f["rule_id"] == "PY002" for f in analyse_python(code))

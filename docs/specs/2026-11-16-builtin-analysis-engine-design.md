@@ -145,18 +145,32 @@ Python only, using the standard library `ast` module. Implemented rules:
   `except Exception: pass`, including `except (Exception, ValueError): pass`; bare
   `except:` stays with the regex rule `QUAL001`)
 - `PY002` — HTTP call without a timeout. Fires on direct module calls (`requests.get(...)`,
-  `httpx.post(...)`) and on calls rooted at an HTTP client registered in the current
-  scope: assignments from `requests.Session()` / `httpx.Client()` / `httpx.AsyncClient()`
-  (including multi-target `a = b = requests.Session()`, annotated assignments, dotted
-  targets such as `self.client`, and the from-import forms `from requests import Session`
-  / `from httpx import Client`), plus `with`/`async with` bindings. Registration is
-  scope-aware: the checker walks the tree in source order with a scope stack, function
-  and class scopes receive a copy of the enclosing scope, and a non-client reassignment
-  (`self.client = {}`) clears the binding — a sibling function's dict `s.get('key')` is
-  never flagged. Calls carrying `**kwargs` are skipped, because the timeout flag cannot
-  be seen. Aliased imports (`import requests as rq`) and dotted module calls are not
-  tracked; a bare `from requests import get` followed by `get(url)` is not flagged.
-  Findings are capped at `MAX_FINDINGS = 60` per file.
+  `httpx.post(...)`, including aliases such as `import requests as rq; rq.get(...)`) and on
+  calls rooted at an HTTP client registered in the current scope: assignments from
+  `requests.Session()` / `httpx.Client()` / `httpx.AsyncClient()` (including multi-target
+  `a = b = requests.Session()`, annotated assignments, dotted targets such as
+  `self.client`, and the from-import forms `from requests import Session` /
+  `from httpx import Client`), plus `with`/`async with` bindings. Constructors fire only
+  when import provenance says the binding came from `requests`/`httpx`: the analyzer
+  collects a local-name → module map from `import` and `from ... import` statements
+  first, so `from sqlalchemy.orm import Session` (and any other unrelated
+  `Session`/`Client` source, covered by a false-positive test) is never treated as an
+  HTTP client. Scope is three-level: one persistent module frame, one persistent frame
+  per class body (all methods of the class see the same frame), and a transient frame
+  per function/method. Function frames merge their dotted keys — both registered keys
+  and tombstones — into the parent frame on exit; keys without a dot stay local to the
+  function. A non-client reassignment (`self.client = {}`) writes a tombstone in the
+  current frame instead of deleting the outer registration; lookup walks from the
+  innermost frame outwards and the nearest frame with a registration or a tombstone
+  wins, so `s = requests.Session()` at module level followed by `s = {}` inside a
+  function is never flagged, and `self.client = {}` in one method clears the binding
+  for sibling methods as well. `with`/`async with` bindings live in a transient frame
+  that is discarded at the end of the block, so a closed client is never flagged
+  afterwards. Calls carrying `**kwargs` or a `*args` positional argument are skipped,
+  because the timeout flag cannot be seen. Dotted module calls
+  (`from requests import api; api.get(...)`) and a bare `from requests import get`
+  followed by `get(url)` are not tracked. Findings are capped at
+  `MAX_FINDINGS = 60` per file.
 - `QUAL003` — builtin `open()` without `encoding=` (binary modes and the positional
   4th-argument `encoding` form, `open('f', 'w', -1, 'utf-8')`, are exempt); the builtin
   only — `os.open`, `tarfile.open`, `gzip.open`, `Path.open` never fire
@@ -316,11 +330,11 @@ The README states each of these plainly.
   not a proof.
 - The AST pass covers Python. The other four languages get the tokenizer and semantic
   passes only.
-- The AST pass's HTTP-timeout check does not track aliased imports
-  (`import requests as rq`), dotted module calls, or a bare `from requests import get`
-  followed by `get(url)`; calls with `**kwargs` are skipped because the timeout flag
-  cannot be seen. PY001 is a medium-confidence token heuristic, not a proof — an
-  authorization check phrased without an auth-flavored token is missed.
+- The AST pass's HTTP-timeout check does not track dotted module calls or a bare
+  `from requests import get` followed by `get(url)`; calls with `**kwargs` or a `*args`
+  positional argument are skipped because the timeout flag cannot be seen. PY001 is a
+  medium-confidence token heuristic, not a proof — an authorization check phrased
+  without an auth-flavored token is missed.
 
 ## Deliverables
 

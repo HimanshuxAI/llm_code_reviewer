@@ -23,16 +23,33 @@ def _ident_parts(name):
     return [p.lower() for p in re.split(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])", name) if p]
 
 
-def _is_client_constructor(call):
+def _imported_names(tree):
+    # provenance map: local binding name -> the requests/httpx module it came from
+    m = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "") in HTTP_MODULES:
+            for a in node.names:
+                m[a.asname or a.name] = node.module
+        elif isinstance(node, ast.Import):
+            for a in node.names:
+                root = a.name.split(".")[0]
+                if root in HTTP_MODULES:
+                    m[a.asname or root] = root
+    return m
+
+
+def _is_client_constructor(call, imported):
     if not isinstance(call, ast.Call):
         return False
     f = call.func
     if isinstance(f, ast.Attribute) and f.attr in {"Session", "Client", "AsyncClient"}:
-        base = getattr(f.value, "id", None) or getattr(f.value, "attr", "")
-        return base in HTTP_MODULES
-    # from requests import Session / from httpx import Client
+        base = _dotted(f.value)
+        root = base.split(".")[0] if base else ""
+        return root in HTTP_MODULES or imported.get(root) in HTTP_MODULES
+    # from requests import Session / from httpx import Client (only when the
+    # binding really came from requests/httpx)
     if isinstance(f, ast.Name) and f.id in {"Session", "Client", "AsyncClient"}:
-        return True
+        return imported.get(f.id) in HTTP_MODULES
     return False
 
 
@@ -51,35 +68,67 @@ def _is_broad_handler(type_node):
     return False
 
 
-class _Checker(ast.NodeVisitor):
+class _Frame:
     def __init__(self):
-        self.scopes = [set()]
+        self.reg = set()
+        self.tomb = set()
+
+
+class _Checker(ast.NodeVisitor):
+    def __init__(self, imported):
+        self.scopes = [_Frame()]  # persistent module frame
         self.findings = []
+        self.imported = imported
 
     # ---- scope helpers
-    def _register(self, key): self.scopes[-1].add(key)
-    def _unregister(self, key): self.scopes[-1].discard(key)
+    def _register(self, key):
+        self.scopes[-1].reg.add(key)
+        self.scopes[-1].tomb.discard(key)
+
+    def _unregister(self, key):
+        # writes a tombstone, never removes an outer registration
+        self.scopes[-1].tomb.add(key)
 
     def _lookup(self, key):
-        # walks from innermost scope outwards
+        # walks from innermost scope outwards; nearest frame with any state wins
         for frame in reversed(self.scopes):
-            if key in frame:
+            if key in frame.tomb:
+                return False
+            if key in frame.reg:
                 return True
         return False
 
-    def _open_scope(self): self.scopes.append(set(self.scopes[-1]))
-    def _close_scope(self): self.scopes.pop()
+    def _open_scope(self): self.scopes.append(_Frame())
+
+    def _close_scope(self, merge_dotted=False):
+        frame = self.scopes.pop()
+        if not merge_dotted:
+            return
+        # function frames merge their dotted keys (registrations and tombstones)
+        # into the parent frame; bare names stay local to the function
+        parent = self.scopes[-1]
+        for key in frame.reg:
+            if "." in key:
+                parent.reg.add(key)
+                parent.tomb.discard(key)
+        for key in frame.tomb:
+            if "." in key:
+                parent.tomb.add(key)
+                parent.reg.discard(key)
 
     def visit_FunctionDef(self, node):
         self._open_scope()
         self._check_function_defaults(node)
         self.generic_visit(node)
-        self._close_scope()
+        # dotted keys merge into the parent frame (module or class body)
+        self._close_scope(merge_dotted=True)
 
     def visit_AsyncFunctionDef(self, node):
         self.visit_FunctionDef(node)
 
     def visit_ClassDef(self, node):
+        # one frame per class body, persisted while the class is visited, so
+        # all methods of the class see the same registrations
         self._open_scope()
         self.generic_visit(node)
         self._close_scope()
@@ -89,7 +138,7 @@ class _Checker(ast.NodeVisitor):
         for t in node.targets:
             key = _dotted(t)
             if key: self._unregister(key)
-        if _is_client_constructor(node.value):
+        if _is_client_constructor(node.value, self.imported):
             for t in node.targets:
                 key = _dotted(t)
                 if key: self._register(key)
@@ -99,16 +148,20 @@ class _Checker(ast.NodeVisitor):
         if node.value is not None:
             key = _dotted(node.target)
             if key: self._unregister(key)
-            if _is_client_constructor(node.value):
+            if _is_client_constructor(node.value, self.imported):
                 if key: self._register(key)
         self.generic_visit(node)
 
     def visit_With(self, node):
+        # transient frame: `with requests.Session() as s` closes s at the end
+        # of the block, so the registration must not outlive it
+        self._open_scope()
         for item in node.items:
-            if _is_client_constructor(item.context_expr) and item.optional_vars is not None:
+            if _is_client_constructor(item.context_expr, self.imported) and item.optional_vars is not None:
                 key = _dotted(item.optional_vars)
                 if key: self._register(key)
         self.generic_visit(node)
+        self._close_scope()
 
     def visit_AsyncWith(self, node):
         self.visit_With(node)
@@ -138,21 +191,29 @@ class _Checker(ast.NodeVisitor):
                       f"except {ast.unparse(node.type)}: pass")
         self.generic_visit(node)
 
-    # http: registered clients (scope copying includes enclosing scopes); also
-    # direct module calls. aliased imports (`import requests as rq`) and dotted
-    # module calls (`from requests import api; api.get(...)`) are not tracked.
+    # http: registered clients (scope-aware via the frame stack; dotted keys
+    # merge from function frames into their parent on exit); also direct
+    # module calls and aliases (`import requests as rq`). Dotted module calls
+    # (`from requests import api; api.get(...)`) are not tracked.
     def _check_http_call(self, node):
         func = node.func
         if not isinstance(func, ast.Attribute):
             return
         if func.attr not in HTTP_METHODS:
             return
-        # **kwargs means we cannot see the timeout flag
+        # **kwargs means we cannot see the timeout flag; a *args positional
+        # may carry it too
         if any(k.arg is None for k in node.keywords):
+            return
+        if any(isinstance(a, ast.Starred) for a in node.args):
             return
         key = _dotted(func.value)
         root = key.split(".")[0] if key else ""
-        is_http = root in HTTP_MODULES or (key is not None and self._lookup(key))
+        is_http = (
+            root in HTTP_MODULES
+            or self.imported.get(root) in HTTP_MODULES
+            or (key is not None and self._lookup(key))
+        )
         if not is_http:
             return
         if "timeout" in {k.arg for k in node.keywords}:
@@ -224,7 +285,7 @@ def analyse_python(source_code: str) -> list[dict]:
         tree = ast.parse(source_code)
     except SyntaxError:
         return []
-    checker = _Checker()
+    checker = _Checker(_imported_names(tree))
     checker.visit(tree)
     # Lambdas with mutable defaults are not flagged: lambda arguments are not
     # visited by visit_FunctionDef (documented narrowness).
