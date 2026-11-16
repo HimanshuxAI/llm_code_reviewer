@@ -7,6 +7,7 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -32,7 +33,7 @@ export default function Register() {
       }
       const ld = await loginRes.json();
       localStorage.setItem("token", ld.access_token);
-      window.location.href = "/";
+      window.location.href = "/submit";
     } catch {
       setError("Network error. Is the backend running on localhost:8000?");
     } finally {
@@ -41,16 +42,21 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-56px)] flex items-center justify-center px-4">
-      <div className="max-w-sm w-full">
-        <div className="flex items-center gap-3 mb-8">
+    <div className="auth-grid">
+      <div className="auth-side">
+        <Link to="/" className="brand mb-12">
           <div className="brand-mark" />
-          <h1 className="text-xl font-extrabold tracking-tighter">Code Reviewer</h1>
-        </div>
+          <span>Code Reviewer</span>
+        </Link>
+
+        <h1 className="text-3xl font-extrabold tracking-tighter mb-2">Create account</h1>
+        <p className="text-sm text-ink-soft mb-9">
+          Free, takes ten seconds, and every review gets saved to your history.
+        </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Email address</label>
+            <label className="field-label">Email address</label>
             <input
               type="email"
               required
@@ -62,13 +68,13 @@ export default function Register() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Password</label>
+            <label className="field-label">Password</label>
             <input
               type="password"
               required
               minLength={8}
               className="input w-full"
-              placeholder="••••••••"
+              placeholder="At least 8 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -85,10 +91,43 @@ export default function Register() {
           </button>
         </form>
 
-        <p className="mt-8 text-center text-[11px] text-slate-400">
-          Already have an account?{" "}
-          <Link to="/login" className="text-accent font-medium">Sign in</Link>
+        <p className="mt-8 text-xs text-muted">
+          Already registered?{" "}
+          <Link to="/login" className="text-primary font-medium">
+            Sign in
+          </Link>
         </p>
+      </div>
+
+      <div className="auth-visual">
+        <div className="demo w-full max-w-md">
+          <div className="demo-head">
+            <span>config.py — review output</span>
+            <span className="demo-score">
+              <span className="n" style={{ color: "var(--warn)" }}>90</span>
+              <span className="l">score</span>
+            </span>
+          </div>
+          <div className="demo-body">
+            <pre className="demo-code">
+              <code>
+                <span>api_key = "sk-live-9f3a2b8c"</span>{"\n"}
+                <span>requests.get(url, verify=False)</span>
+              </code>
+            </pre>
+            <div className="demo-finding" style={{ borderLeftColor: "var(--warn)" }}>
+              <div className="demo-finding-top">
+                <span className="demo-finding-title">Hardcoded credential</span>
+                <span className="demo-finding-meta">SEC003 · line 1</span>
+              </div>
+              <p className="demo-finding-body">
+                Secrets committed in source leak through version history and
+                shared repos.
+              </p>
+              <pre className="demo-finding-fix">api_key = os.environ["API_KEY"]</pre>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

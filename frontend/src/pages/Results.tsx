@@ -2,12 +2,9 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getReview } from "../api";
 import { type ReviewDetail } from "../api";
-import ScoreDial from "../components/ScoreDial";
-import FindingCard from "../components/FindingCard";
-import DiffPreview from "../components/DiffPreview";
-import CopyButton from "../components/CopyButton";
-import ScanLoader from "../components/ScanLoader";
+import Workspace from "../components/Workspace";
 import EmptyState from "../components/EmptyState";
+import { FileCode2, Check } from "lucide-react";
 
 export default function Results() {
   const { id } = useParams();
@@ -22,31 +19,21 @@ export default function Results() {
       .then(async (res) => {
         if (!res.ok) {
           setError("Review not found");
-          setLoading(false);
           return;
         }
         setReview(await res.json());
       })
-      .catch(() => {
-        setError("Network error loading review");
-        setLoading(false);
-      })
+      .catch(() => setError("Network error loading review"))
       .finally(() => setLoading(false));
   }, [id]);
 
-  const counts: Record<string, number> = review
-    ? {
-        critical: review.findings.filter((f) => f.severity === "critical").length,
-        high: review.findings.filter((f) => f.severity === "high").length,
-        medium: review.findings.filter((f) => f.severity === "medium").length,
-        low: review.findings.filter((f) => f.severity === "low").length,
-      }
-    : { critical: 0, high: 0, medium: 0, low: 0 };
-
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-56px)] flex items-center justify-center">
-        <ScanLoader />
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="loader">
+          <div className="loader-dot" />
+          <p className="loader-text">Analyzing code...</p>
+        </div>
       </div>
     );
   }
@@ -56,7 +43,7 @@ export default function Results() {
       <div className="page">
         <EmptyState
           title="Review not found"
-          subtitle={error || "The review you&apos;re looking for doesn&apos;t exist."}
+          subtitle={error || "The review you are looking for does not exist."}
           action={
             <Link to="/submit" className="btn btn-primary">
               Submit new code
@@ -67,77 +54,97 @@ export default function Results() {
     );
   }
 
+  const lines = review.source_code.split("\n");
+  const flagged = new Set(review.findings.map((f) => f.line));
+  const criticalCount = review.findings.filter((f) => f.severity === "critical").length;
+  const warnCount = review.findings.filter(
+    (f) => f.severity === "high" || f.severity === "medium"
+  ).length;
+
   return (
-    <div className="page fade-in">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="section-title">Review results</h2>
-          <p className="section-sub">
-            Language:{" "}
-            <span className="font-mono text-slate-600">{review.language}</span>
-          </p>
-        </div>
-        <Link to="/history" className="btn btn-ghost text-xs px-2 py-1">
-          Back to history
-        </Link>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-3">
-          <ScoreDial score={review.score} />
-
-          <div className="mt-6 severity-counts">
-            {[
-              { key: "critical", label: "Critical", cls: "badge-danger" },
-              { key: "high", label: "High", cls: "badge-warn" },
-              { key: "medium", label: "Medium", cls: "badge-warn" },
-              { key: "low", label: "Low", cls: "badge-success" },
-            ].map((sev) => (
-              <span
-                key={sev.key}
-                className={`count-badge ${counts[sev.key] > 0 ? sev.cls : "text-slate-400 border-transparent bg-transparent"}`}
-              >
-                {sev.label}: <span className="num">{counts[sev.key]}</span>
-              </span>
-            ))}
+    <Workspace
+      tab={`review-${review.id}.py`}
+      status={{
+        left: `${lines.length} lines · ${review.language}`,
+        right: `${review.findings.length} problems`,
+        score: review.score,
+      }}
+      tree={
+        <>
+          <div className="tree-head">Review #{review.id}</div>
+          <div className="tree-folder">
+            <FileCode2 className="h-3.5 w-3.5" /> submitted
           </div>
-        </div>
-
-        <div className="lg:col-span-9">
-          <div className="grid gap-4">
+          <div className="tree-item active">source.{review.language === "python" ? "py" : review.language.slice(0, 2)}</div>
+          <div style={{ padding: "14px 14px 0" }}>
+            {criticalCount > 0 && (
+              <div className="tree-badge crit" style={{ display: "inline-block", marginBottom: 6 }}>
+                {criticalCount} critical
+              </div>
+            )}
+            {warnCount > 0 && (
+              <div className="tree-badge warn" style={{ display: "inline-block" }}>
+                {warnCount} warnings
+              </div>
+            )}
+            {criticalCount === 0 && warnCount === 0 && (
+              <div className="tree-badge ok" style={{ display: "inline-block" }}>
+                clean
+              </div>
+            )}
+          </div>
+        </>
+      }
+      inspector={
+        <>
+          <div className="inspector-head">
+            <span className="inspector-title">Problems</span>
+            <span className={`tree-badge ${criticalCount > 0 ? "crit" : warnCount > 0 ? "warn" : "ok"}`}>
+              {review.findings.length}
+            </span>
+          </div>
+          <div className="inspector-body">
             {review.findings.length === 0 ? (
-              <div className="panel p-8 text-center border-dashed border-line">
-                <span className="text-success text-2xl mb-3">✓</span>
-                <h3 className="text-lg font-bold text-ink mb-1">No issues found</h3>
-                <p className="text-sm text-slate-500">
-                  Your code looks clean on both static scan and AI review.
+              <div className="flex flex-col items-center py-8 text-center">
+                <Check className="h-8 w-8 text-success mb-3" />
+                <p className="text-sm font-bold text-ink">No issues found</p>
+                <p className="text-xs text-muted mt-1">
+                  Static scan and AI review both came back clean.
                 </p>
               </div>
             ) : (
               review.findings.map((f) => (
-                <FindingCard key={`${f.rule_id}-${f.line}`} finding={f} />
+                <div key={`${f.rule_id}-${f.line}`} className={`issue sev-${f.severity}`}>
+                  <div className="issue-top">
+                    <span className="issue-title">{f.title}</span>
+                  </div>
+                  <div className="issue-meta">
+                    {f.rule_id} · line {f.line} · {f.source}
+                  </div>
+                  <p className="issue-text">{f.explanation}</p>
+                  {f.fixed_snippet && <pre className="issue-fix">{f.fixed_snippet}</pre>}
+                </div>
               ))
             )}
           </div>
-
-          <DiffPreview
-            source_code={review.source_code}
-            fixed_snippet={
-              review.findings.find((f) => f.fixed_snippet)?.fixed_snippet ?? null
-            }
-          />
+        </>
+      }
+    >
+      <div className="ide-editor">
+        <div className="ide-gutter">
+          {lines.map((_, i) => (
+            <div
+              key={i}
+              className={`ide-gutter-line ${flagged.has(i + 1) ? "flagged" : ""}`}
+            >
+              {i + 1}
+            </div>
+          ))}
+        </div>
+        <div className="ide-code">
+          <pre>{review.source_code}</pre>
         </div>
       </div>
-
-      <div className="mt-8 pt-6 border-t border-line flex items-center justify-between text-[11px] text-slate-400">
-        <span>
-          Reviewed{" "}
-          <span className="text-ink font-medium">{new Date(review.created_at).toLocaleString()}</span>
-        </span>
-        <CopyButton text={review.source_code} />
-      </div>
-    </div>
+    </Workspace>
   );
 }
-
-

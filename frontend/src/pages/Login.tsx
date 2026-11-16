@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { login } from "../api";
 
 export default function Login() {
@@ -30,16 +30,21 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-56px)] flex items-center justify-center px-4">
-      <div className="max-w-sm w-full">
-        <div className="flex items-center gap-3 mb-8">
+    <div className="auth-grid">
+      <div className="auth-side">
+        <Link to="/" className="brand mb-12">
           <div className="brand-mark" />
-          <h1 className="text-xl font-extrabold tracking-tighter">Code Reviewer</h1>
-        </div>
+          <span>Code Reviewer</span>
+        </Link>
+
+        <h1 className="text-3xl font-extrabold tracking-tighter mb-2">Sign in</h1>
+        <p className="text-sm text-ink-soft mb-9">
+          Pick up where you left off. Your review history is waiting.
+        </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Email address</label>
+            <label className="field-label">Email address</label>
             <input
               type="email"
               required
@@ -51,7 +56,7 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Password</label>
+            <label className="field-label">Password</label>
             <input
               type="password"
               required
@@ -69,19 +74,47 @@ export default function Login() {
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn w-full btn-primary"
-          >
+          <button type="submit" disabled={loading} className="btn w-full btn-primary">
             {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
 
-        <p className="mt-8 text-center text-[11px] text-slate-400">
-          Don't have an account?{" "}
-          <a href="/register" className="text-accent font-medium">Create one</a>
+        <p className="mt-8 text-xs text-muted">
+          No account yet?{" "}
+          <Link to="/register" className="text-primary font-medium">
+            Create one
+          </Link>
         </p>
+      </div>
+
+      <div className="auth-visual">
+        <div className="demo w-full max-w-md">
+          <div className="demo-head">
+            <span>session.py — review output</span>
+            <span className="demo-score">
+              <span className="n" style={{ color: "var(--danger)" }}>60</span>
+              <span className="l">score</span>
+            </span>
+          </div>
+          <div className="demo-body">
+            <pre className="demo-code">
+              <code>
+                <span className="flag">query = "SELECT * FROM users WHERE id=" + uid</span>{"\n"}
+                <span>cursor.execute(query)</span>
+              </code>
+            </pre>
+            <div className="demo-finding">
+              <div className="demo-finding-top">
+                <span className="demo-finding-title">SQL built by string concatenation</span>
+                <span className="demo-finding-meta">SEC004 · line 1</span>
+              </div>
+              <p className="demo-finding-body">
+                Concatenating user input into SQL allows injection attacks.
+              </p>
+              <pre className="demo-finding-fix">cursor.execute("SELECT * FROM users WHERE id=?", (uid,))</pre>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

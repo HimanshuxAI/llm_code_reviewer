@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { submitReview } from "../api";
-import { Upload, ArrowRight } from "lucide-react";
-import CodeEditor from "../components/CodeEditor";
+import { Upload, Play, FileCode2 } from "lucide-react";
+import Workspace from "../components/Workspace";
 
 export default function Submit() {
   const [code, setCode] = useState("");
@@ -16,15 +16,13 @@ export default function Submit() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      setCode(text);
+      setCode(ev.target?.result as string);
       setFilename(file.name);
     };
     reader.readAsText(file);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     setError("");
     if (!code.trim()) {
       setError("Paste or upload some source code first.");
@@ -46,85 +44,116 @@ export default function Submit() {
     }
   };
 
+  const lines = code.split("\n");
+
   return (
-    <div className="page">
-      <div className="flex flex-col lg:flex-row gap-8 items-start">
-        <div className="lg:w-3/5 min-w-0">
-          <div>
-            <h2 className="section-title">New review</h2>
-            <p className="section-sub">
-              Paste or upload source code. It gets scanned for bugs, security
-              issues, and quality problems — then scored 0-100.
-            </p>
+    <Workspace
+      tab={filename || "untitled.py"}
+      status={{
+        left: code ? `${lines.length} lines · ${code.length} chars` : "no file open",
+        right: filename ? filename.split(".").pop() : "plaintext",
+      }}
+      tree={
+        <>
+          <div className="tree-head">Explorer</div>
+          <div className="tree-folder">
+            <FileCode2 className="h-3.5 w-3.5" /> workspace
           </div>
-
-          <div className="mt-6 panel p-4">
-            <div className="flex items-center justify-between mb-4">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Source code</label>
-              <button
-                type="button"
-                onClick={() => document.getElementById("file-input")?.click()}
-                className="btn btn-ghost text-xs px-2 py-1"
-              >
-                <Upload className="h-3 w-3 mr-1" /> Upload file
-              </button>
-              <input
-                id="file-input"
-                type="file"
-                className="hidden"
-                accept=".py,.js,.jsx,.ts,.tsx,.java,.c,.cpp,.cc,.h,.hpp"
-                onChange={handleFile}
-              />
+          {code ? (
+            <div className="tree-item active">{filename || "untitled.py"}</div>
+          ) : (
+            <div className="tree-item" style={{ color: "var(--muted)", cursor: "default" }}>
+              no file open
             </div>
+          )}
+        </>
+      }
+      inspector={
+        <>
+          <div className="inspector-head">
+            <span className="inspector-title">Review</span>
+          </div>
+          <div className="inspector-body">
+            <button
+              onClick={handleSubmit}
+              disabled={loading || !code.trim()}
+              className="btn btn-primary w-full"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              {loading ? "Analyzing..." : "Run review"}
+            </button>
 
-            <CodeEditor value={code} onChange={setCode} filename={filename} />
-
-            {filename && (
-              <p className="text-[10px] text-slate-400 font-mono mt-2">File: {filename}</p>
-            )}
+            <button
+              onClick={() => document.getElementById("file-input")?.click()}
+              className="btn btn-ghost w-full"
+            >
+              <Upload className="h-4 w-4 mr-2" /> Load file
+            </button>
+            <input
+              id="file-input"
+              type="file"
+              className="hidden"
+              accept=".py,.js,.jsx,.ts,.tsx,.java,.c,.cpp,.cc,.h,.hpp"
+              onChange={handleFile}
+            />
 
             {error && (
-              <div className="rounded bg-red-50 border border-red-100 px-3 py-2 text-sm text-red-700 mt-3">
+              <div className="rounded bg-red-50 border border-red-100 px-3 py-2 text-sm text-red-700">
                 {error}
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={loading || !code.trim()}
-              className="btn mt-4 w-full btn-primary"
-            >
-              <ArrowRight className="h-4 w-4 mr-2" /> Review code
-            </button>
+            <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14, marginTop: 6 }}>
+              <p className="inspector-title mb-3">Pipeline</p>
+              <ol style={{ listStyle: "none", padding: 0 }} className="space-y-2">
+                {[
+                  "Detect language",
+                  "Static heuristic scan",
+                  "LLM review (if configured)",
+                  "Merge and score",
+                ].map((step, i) => (
+                  <li
+                    key={step}
+                    style={{
+                      display: "flex",
+                      gap: 9,
+                      fontSize: 12,
+                      color: "var(--ink-soft)",
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    <span style={{ color: "var(--accent)", fontWeight: 700 }}>
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+            </div>
           </div>
+        </>
+      }
+    >
+      <div className="ide-editor">
+        <div className="ide-gutter">
+          {lines.map((_, i) => (
+            <div key={i} className="ide-gutter-line">
+              {i + 1}
+            </div>
+          ))}
         </div>
-
-        <div className="lg:w-2/5">
-          <div className="panel p-6 sticky top-24">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">How it works</h3>
-            <ul className="space-y-4 text-sm text-slate-600">
-              <li className="flex items-start gap-3">
-                <span className="text-accent font-bold">1</span>
-                Static heuristic scan runs on every submission — no API key needed.
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="text-accent font-bold">2</span>
-                LLM review adds context-aware findings when configured.
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="text-accent font-bold">3</span>
-                Findings are merged, deduplicated, and scored 0-100.
-              </li>
-            </ul>
-          </div>
+        <div className="ide-code">
+          <textarea
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder={"# paste your code here\n\ndef login(user, password):\n    ..."}
+            spellCheck={false}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+          />
         </div>
       </div>
-
-      <p className="mt-8 text-[11px] text-slate-400 max-w-md">
-        Static analysis is always on. LLM review is used when an API key is
-        configured on the backend.
-      </p>
-    </div>
+    </Workspace>
   );
 }
