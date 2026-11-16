@@ -182,7 +182,7 @@ Python only, using the standard library `ast` module. Implemented rules:
   of them shadow an outer client within their scope: assignment (including tuple,
   starred and chained targets), annotated assignment, `for`/`async for` targets
   (including unpackings), comprehension targets, `with`/`async with` bindings,
-  `except ... as` names, lambda parameters, and walrus targets (`(s := ...)` binds
+  `except . Walrus bindings made inside a transient frame (comprehension, `with`, except handler, lambda) stay in that frame and do not escape it — real Python leaks a comprehension walrus to the enclosing scope; that case is a documented false negative... as` names, lambda parameters, and walrus targets (`(s := ...)` binds
   in the current frame and persists, treated as an assignment). Comprehension
   targets, `with`/`async with` bindings, `except ... as` names and lambda parameters
   live in transient frames that are discarded at the end of their construct, so a
