@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../api";
-import { Mail, Lock, ShieldCheck } from "lucide-react";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -31,50 +30,41 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="max-w-md w-full glass p-8 shadow-lg">
-        <div className="mb-7">
-          <div className="flex items-center gap-2 mb-3">
-            <ShieldCheck className="h-5 w-5 text-blue-500" />
-            <h1 className="h2">Sign in</h1>
-          </div>
-          <p className="text-sm text-slate-500">Review your code securely. Enter your account below.</p>
+    <div className="min-h-[calc(100vh-56px)] flex items-center justify-center px-4">
+      <div className="max-w-sm w-full">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="brand-mark" />
+          <h1 className="text-xl font-extrabold tracking-tighter">Code Reviewer</h1>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-widest">Email address</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-              <input
-                type="email"
-                required
-                className="input pl-10"
-                placeholder="you@college.edu"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Email address</label>
+            <input
+              type="email"
+              required
+              className="input w-full"
+              placeholder="you@college.edu"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-widest">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-              <input
-                type="password"
-                required
-                minLength={8}
-                className="input pl-10"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Password</label>
+            <input
+              type="password"
+              required
+              minLength={8}
+              className="input w-full"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
 
           {error && (
-            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-700">
+            <div className="rounded bg-red-50 border border-red-100 px-3 py-2 text-sm text-red-700">
               {error}
             </div>
           )}
@@ -88,9 +78,9 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="mt-9 text-center text-xs text-slate-500">
+        <p className="mt-8 text-center text-[11px] text-slate-400">
           Don't have an account?{" "}
-          <a href="/register" className="text-blue-600 hover:text-blue-700 ml-1 font-medium">Create one</a>
+          <a href="/register" className="text-accent font-medium">Create one</a>
         </p>
       </div>
     </div>

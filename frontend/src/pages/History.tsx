@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { listReviews } from "../api";
 import { type ReviewSummary } from "../api";
-import { Clock } from "lucide-react";
+
 import EmptyState from "../components/EmptyState";
 
 export default function History() {
@@ -27,43 +27,33 @@ export default function History() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4">
-        <div className="flex flex-col items-center justify-center py-24">
-          <div className="relative w-10 h-10 mb-4">
-            <Clock className="h-5 w-5 text-blue-500 animate-spin" />
-          </div>
-          <p className="text-sm text-slate-500">Loading history...</p>
-        </div>
+      <div className="min-h-[calc(100vh-56px)] flex items-center justify-center px-4">
+        <ScanLoaderInline />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4">
-        <div className="max-w-md">
-          <EmptyState
-            title="Unable to load history"
-            subtitle={error}
-            action={
-              <button
-                onClick={() => navigate("/submit")}
-                className="btn btn-primary"
-              >
-                Submit new code
-              </button>
-            }
-          />
-        </div>
+      <div className="page">
+        <EmptyState
+          title="Unable to load history"
+          subtitle={error}
+          action={
+            <Link to="/submit" className="btn btn-primary">
+              Submit new code
+            </Link>
+          }
+        />
       </div>
     );
   }
 
   return (
-    <div className="space-y-7">
+    <div className="page">
       <div>
-        <h1 className="h1">Review history</h1>
-        <p className="mt-2 text-sm text-slate-500">
+        <h2 className="section-title">Review history</h2>
+        <p className="section-sub">
           Your past code reviews, newest first.
         </p>
       </div>
@@ -73,52 +63,50 @@ export default function History() {
           title="No reviews yet"
           subtitle="Submit some code to see your review history here."
           action={
-            <button
-              onClick={() => navigate("/submit")}
-              className="btn btn-primary"
-            >
+            <Link to="/submit" className="btn btn-primary">
               Submit new code
-            </button>
+            </Link>
           }
         />
       ) : (
-        <div className="panel p-0 shadow-lg overflow-hidden">
-          <table className="w-full text-left border-collapse">
+        <div className="panel">
+          <table className="history-table">
             <thead>
-              <tr className="bg-slate-50 border-b border-white/80">
-                <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID</th>
-                <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Language</th>
-                <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Score</th>
-                <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Reviewed at</th>
-                <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest"></th>
+              <tr>
+                <th className="w-16">ID</th>
+                <th className="w-40">Language</th>
+                <th className="w-24">Score</th>
+                <th>Reviewed at</th>
+                <th className="w-32">Code preview</th>
+                <th className="w-24"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/80">
+            <tbody>
               {reviews.map((r) => (
-                <tr
-                  key={r.id}
-                  className="hover:bg-blue-25 transition-colors group"
-                >
-                  <td className="px-4 py-3 text-sm font-mono text-slate-700 font-medium">#{r.id}</td>
-                  <td className="px-4 py-3 text-sm font-mono text-slate-700">{r.language}</td>
-                  <td className="px-4 py-3 text-sm font-bold">
-                    <span className={`px-2 py-1 rounded-xl text-xs font-bold ${
+                <tr key={r.id}>
+                  <td className="font-mono text-sm font-bold text-ink">#{r.id}</td>
+                  <td className="font-mono text-sm text-slate-600">{r.language}</td>
+                  <td className="text-sm font-bold">
+                    <span className={`px-2 py-1 rounded text-xs font-bold ${
                       r.score >= 75
-                        ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                        ? "bg-success-bg text-success border border-success/20"
                         : r.score >= 50
-                        ? "bg-amber-100 text-amber-700 border border-amber-200"
-                        : "bg-red-100 text-red-700 border border-red-200"
+                        ? "bg-warn-bg text-warn border border-warn/20"
+                        : "bg-danger-bg text-danger border border-danger/20"
                     }`}>
                       {r.score}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-500">
+                  <td className="text-sm text-slate-500">
                     {new Date(r.created_at).toLocaleString()}
                   </td>
-                  <td className="px-4 py-3">
+                  <td>
+                    <span className="history-code">{r.id}</span>
+                  </td>
+                  <td>
                     <Link
                       to={`/results/${r.id}`}
-                      className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                      className="text-accent font-medium hover:underline"
                     >
                       View
                     </Link>
@@ -129,6 +117,15 @@ export default function History() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function ScanLoaderInline() {
+  return (
+    <div className="loader">
+      <div className="loader-dot" />
+      <p className="loader-text">Loading history...</p>
     </div>
   );
 }

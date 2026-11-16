@@ -15,10 +15,11 @@ export default function CopyButton({ text }: CopyButtonProps) {
   return (
     <button
       onClick={handleCopy}
-      className="p-2 rounded-xl text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-      title="Copy to clipboard"
+      className="copy-btn"
+      title="Copy code"
     >
-      {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Clipboard className="h-4 w-4" />}
+      {copied ? <Check className="h-3 w-3" /> : <Clipboard className="h-3 w-3" />}
+      <span>{copied ? "Copied" : "Copy code"}</span>
     </button>
   );
 }
