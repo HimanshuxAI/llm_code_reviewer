@@ -92,6 +92,25 @@ def test_trust_manager_in_comment_does_not_fire():
     assert not any(f["rule_id"] == "SEC016" for f in findings)
 
 
+def test_trust_manager_call_site_does_not_fire():
+    code = "defaultTrustManager.checkServerTrusted(c, a);\n"
+    findings = detect_semantic_patterns(code, "java")
+    assert not any(f["rule_id"] == "SEC016" for f in findings)
+
+
+def test_trust_manager_definition_fires():
+    code = (
+        "class T extends X509TrustManager {\n"
+        "    public void checkServerTrusted(X509Certificate[] chain, String authType) {\n"
+        "    }\n"
+        "}\n"
+    )
+    findings = detect_semantic_patterns(code, "java")
+    matches = [f for f in findings if f["rule_id"] == "SEC016"]
+    assert matches
+    assert all(f["severity"] == "medium" for f in matches)
+
+
 def test_suffixed_crypto_instances_fire():
     for algo in ("DES", "DES/ECB/PKCS5Padding", "DESede/CBC/PKCS5Padding", "RC4",
                  "MD5", "MD5withRSA", "SHA1withRSA", "SHA-1"):

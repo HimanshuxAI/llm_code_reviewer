@@ -7,6 +7,11 @@ other languages share a small hand-written scanner.
 Known limitation: nested template-literal `${...}` expressions containing
 backticks are not supported. A backtick inside `${...}` terminates the
 template string early, matching the spec's accept-one-string design.
+
+Known limitation: JavaScript regex literals containing apostrophes (e.g.
+`/don't/`) are not understood, so parsing can fail and the whole file
+falls back to fail-open (source unchanged, a warning is logged, findings
+stay visible).
 """
 import io
 import logging

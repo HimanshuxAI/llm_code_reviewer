@@ -153,6 +153,14 @@ their own, not only when fed untrusted data.
 - C and C++: `strcat()`, `atoi()`, `scanf("%s")`, `alloca()`, `tmpnam()`, `rand()` for
   security
 
+SEC016 (Java) flags a definition of a method named `checkClientTrusted` or
+`checkServerTrusted` carrying a method-definition keyword (`void`, `public`, `private`,
+`protected`, `override`, `final`) on the same line. Interface members
+(`void checkServerTrusted(...);`) match too, which is acceptable for a heuristic. Plain
+call sites and `if`/`return` lines do not match. The rule does not prove the manager
+accepts all certificates; a validating, secure trust manager matches as well, so a
+finding means "a custom trust manager exists and deserves review", not "TLS is broken".
+
 ### Quality metrics
 
 - Function longer than 60 lines

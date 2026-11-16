@@ -61,10 +61,10 @@ SEMANTIC_RULES = [
                  re.compile(r"\bnew\s+XMLDecoder\b"),
                  "XMLDecoder deserialises arbitrary objects and allows remote code execution.",
                  "Use a strict XML parser or JSON with schema validation.", frozenset({"java"})),
-    SemanticRule("SEC016", "TrustManager that accepts everything", "high",
-                 re.compile(r"check(?:Client|Server)Trusted\s*\("),
-                 "A custom TrustManager method was defined; this is the canonical trust-all pattern in Android/TLS code.",
-                 "Delete the custom trust manager and validate against a real CA bundle.", frozenset({"java"})),
+    SemanticRule("SEC016", "Custom TrustManager method implemented", "medium",
+                 re.compile(r"(?:void|public|private|protected|override|final)[\w\s]{0,40}check(?:Client|Server)Trusted\s*\(", re.I),
+                 "A custom X509 trust manager is defined. Trust-all managers defeat TLS certificate validation; even validating managers are easy to get wrong (hostname checks, pins, default validation).",
+                 "Prefer the platform default trust manager. If you keep the custom one, verify the body rejects unknown certificates and pins hostnames, and never accept all certificates.", frozenset({"java"})),
     SemanticRule("JS001", "document.write()", "medium",
                  re.compile(r"\bdocument\.write\s*\("),
                  "document.write() injects HTML directly; unsanitised input leads to XSS.",
@@ -104,6 +104,8 @@ def detect_semantic_patterns(source: str, language: str) -> list[dict]:
     if language == "text":
         return []
     masked = strip_comments(source, language)
+    # File-level heuristic: any occurrence of the substring (including in
+    # strings) enables JS004 for this file.
     has_child_process = "child_process" in masked
     findings = []
     # Line-oriented on purpose: rules cannot span lines, so multi-line
