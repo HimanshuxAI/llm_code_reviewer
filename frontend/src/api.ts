@@ -1,8 +1,33 @@
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
+// Namespaced on purpose. localhost:5173 is shared with any other app on
+// that port, and a generic "token" key let one app's session overwrite
+// another's — the other app's token then reached this API and came back
+// 401 on a perfectly good review.
+const TOKEN_KEY = "code-reviewer.token";
+
 export function token(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(value: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(TOKEN_KEY, value);
+}
+
+export function clearToken() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+function handleUnauthorized(res: Response, path: string) {
+  if (res.status !== 401) return;
+  if (path.startsWith("/api/auth/")) return;
+  clearToken();
+  if (typeof window === "undefined") return;
+  if (window.location.pathname.startsWith("/login")) return;
+  window.location.assign("/login?expired=1");
 }
 
 async function request(path: string, opts: RequestInit = {}): Promise<Response> {
@@ -13,6 +38,7 @@ async function request(path: string, opts: RequestInit = {}): Promise<Response> 
   const t = token();
   if (t) headers.Authorization = `Bearer ${t}`;
   const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  handleUnauthorized(res, path);
   return res;
 }
 

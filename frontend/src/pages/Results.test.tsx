@@ -56,7 +56,7 @@ function renderResults(payload: unknown) {
 
 describe("Results page", () => {
   beforeEach(() => {
-    localStorage.setItem("token", "test-token");
+    localStorage.setItem("code-reviewer.token", "test-token");
   });
 
   it("renders the submitted source code in the editor", async () => {

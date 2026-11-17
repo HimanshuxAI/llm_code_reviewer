@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { login } from "../api";
+import { login, setToken } from "../api";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -20,7 +20,7 @@ export default function Login() {
         return;
       }
       const data = await res.json();
-      localStorage.setItem("token", data.access_token);
+      setToken(data.access_token);
       navigate("/", { replace: true });
     } catch {
       setError("Network error. Is the backend running on localhost:8000?");

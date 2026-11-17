@@ -1,10 +1,11 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { History as HistoryIcon } from "lucide-react";
+import { token as getToken, clearToken } from "../api";
 
 export default function Nav() {
   const navigate = useNavigate();
   const location = useLocation();
-  const token = localStorage.getItem("token");
+  const token = getToken();
   const active = (p: string) => location.pathname === p;
 
   return (
@@ -26,7 +27,7 @@ export default function Nav() {
           {token ? (
             <button
               onClick={() => {
-                localStorage.removeItem("token");
+                clearToken();
                 navigate("/login");
               }}
               className="btn btn-ghost"

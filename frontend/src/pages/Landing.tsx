@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { FileCode2, Folder, ShieldCheck, History as HistoryIcon, Plus } from "lucide-react";
+import { token as getToken, clearToken } from "../api";
 
 const RULES = [
   { id: "SEC001", desc: "eval() executes untrusted input as code", sev: "critical" },
@@ -16,7 +17,7 @@ const RULES = [
 
 export default function Landing() {
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
+  const token = getToken();
 
   return (
     <div className="shell">
@@ -32,7 +33,7 @@ export default function Landing() {
             {token ? (
               <button
                 onClick={() => {
-                  localStorage.removeItem("token");
+                  clearToken();
                   navigate("/login");
                 }}
                 className="btn btn-ghost"

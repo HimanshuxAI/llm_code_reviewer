@@ -1,5 +1,6 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { FileCode2, History as HistoryIcon, ShieldCheck, LogOut, Plus } from "lucide-react";
+import { token as getToken, clearToken } from "../api";
 
 interface WorkspaceProps {
   children: React.ReactNode;
@@ -22,7 +23,7 @@ export default function Workspace({
 }: WorkspaceProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const token = localStorage.getItem("token");
+  const token = getToken();
 
   const classes = ["ide"];
   if (hideTree) classes.push("no-tree");
@@ -59,7 +60,7 @@ export default function Workspace({
           <button
             className="rail-item"
             onClick={() => {
-              localStorage.removeItem("token");
+              clearToken();
               navigate("/login");
             }}
             title="Sign out"

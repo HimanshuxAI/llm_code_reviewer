@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { register } from "../api";
+import { register, setToken } from "../api";
 
 export default function Register() {
   const [email, setEmail] = useState("");
@@ -32,7 +32,7 @@ export default function Register() {
         return;
       }
       const ld = await loginRes.json();
-      localStorage.setItem("token", ld.access_token);
+      setToken(ld.access_token);
       window.location.href = "/submit";
     } catch {
       setError("Network error. Is the backend running on localhost:8000?");
