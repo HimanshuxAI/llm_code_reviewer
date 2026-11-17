@@ -1,25 +1,39 @@
 # LLM-Powered Secure Code Review Assistant
 
-AI-powered automated code quality and security analysis for student projects. Students paste or upload source code and receive a review with severity-ranked findings, plain-English explanations, fix suggestions, and an overall code-quality score.
+Automated code quality and security analysis for student projects. Students paste or upload source code and receive a review with severity-ranked findings, plain-English explanations, fix suggestions, and an overall code-quality score.
 
 ## What it does
 
-The application accepts source code (pasted text or uploaded file), detects the programming language, runs a static heuristic scanner, optionally calls a language model for additional findings, merges and deduplicates the results, and returns a severity-weighted quality score from 0 to 100.
+The application accepts source code (pasted text or uploaded file), detects the programming language, runs a built-in analysis engine over it, and returns a severity-ranked set of findings plus a quality score from 0 to 100. Nothing leaves the machine: there is no model endpoint, no API key, and no network call in the review path.
 
 Users register with an email and password, authenticate with JWT tokens, and can view their review history on a dashboard. Each review is owned by the submitting user; other users cannot read another user's reviews.
+
+## Analysis engine
+
+Reviews are produced entirely by a built-in engine. It runs six analysis passes over the source, sharing one tokenizer:
+
+1. **Regex rules** — 14 security patterns over every line. Comments are masked before matching, so a commented-out credential is not reported.
+2. **Taint tracking** — untrusted input is followed to dangerous calls, across function boundaries. Python uses the `ast` module; JavaScript, Java, C and C++ use a token-based function inventory with brace matching.
+3. **Secret detection** — Shannon entropy plus known token prefixes (AWS keys, Stripe keys, GitHub tokens). Secret values are redacted in reports.
+4. **Python AST analysis** — semantic checks such as mutable default arguments, bare `except` clauses, and HTTP clients created without a timeout.
+5. **Semantic catalogue** — per-language dangerous patterns (weak ciphers, `Runtime.exec`, `strcat`, `document.write`).
+6. **Quality metrics** — function length, cyclomatic complexity, nesting depth, parameter count, leftover debug output, and TODO comments.
+
+Taint findings are reported as **high** confidence when the flow stays inside one function and **medium** confidence when it crosses a function boundary or comes from the token-based path. The call graph for non-Python languages is inferred from brace matching, so a medium finding is a prompt to look, not a proof.
+
+Findings from every pass are merged and deduplicated by line, severity and title, then capped at 80.
 
 ## Features
 
 - Email/password registration and login with JWT bearer tokens
 - Submit source code by pasting or uploading a file
 - Automatic language detection (Python, JavaScript, Java, C, C++)
-- Static heuristic security scanner that runs without any API key
-- Optional LLM-based review through an OpenAI-compatible endpoint, off by default
-- Works fully offline with no API key and no internet connection
+- Six-pass built-in analysis engine, with no API key and no network access
 - Severity-ranked findings: critical, high, medium, low
+- Confidence label on every finding: high or medium
 - Plain-English explanations and fix suggestions per finding
-- Corrected code snippets when available
-- Overall code-quality score (0-100)
+- Evidence snippet showing the code that triggered the finding
+- Overall code-quality score with damping for repeated findings
 - Review history dashboard, newest first
 - Owner-only access to individual reviews
 - CORS enabled for local frontend development
@@ -27,13 +41,13 @@ Users register with an email and password, authenticate with JWT tokens, and can
 ## Tech stack
 
 Backend:
-- Python 3
+- Python 3 (standard library analysis engine; `ast` for Python, a hand-written tokenizer otherwise)
 - FastAPI
 - SQLAlchemy 2 with SQLite
 - PyJWT for authentication
 - bcrypt for password hashing
 - pydantic-settings for configuration
-- httpx for LLM API calls
+- httpx, used only by the test client
 - pytest for tests
 
 Frontend:
@@ -63,14 +77,22 @@ backend/
       router.py        POST /api/reviews, GET /api/reviews, GET /api/reviews/{id}
       schemas.py       Pydantic request/response models
     analysis/
+      tokenizer.py     shared tokenizer; comment and string masking
       detect.py        language detection from filename and content
       rules.py         static analysis rule definitions
       static_scanner.py line-by-line rule scanner
-      llm_reviewer.py  OpenAI-compatible LLM client with strict JSON parsing
-      scorer.py        severity-weighted 0-100 score
-      pipeline.py      merge and deduplicate static and LLM findings
-    tests/
-      pytest test suite for auth, scanner, scorer, pipeline, app, and API
+      ast_analyzer.py  scope-aware Python AST checks
+      taint.py         two-phase interprocedural taint analysis
+      tokens.py        brace-matched function inventory for non-Python languages
+      secrets.py       entropy and prefix secret detection
+      sinks.py         per-language sources, sinks and semantic patterns
+      quality.py       maintainability metrics
+      engine.py        runs every pass, merges and deduplicates findings
+      scorer.py        damped severity-weighted 0-100 score
+      pipeline.py      detect language, run engine, score
+  tests/
+      pytest suite for auth, tokenizer, sinks, secrets, AST, taint, quality,
+      scoring, engine, pipeline and the API
 frontend/
   src/
     main.tsx           entry point
@@ -99,45 +121,45 @@ Reviews:
 - `GET /api/reviews/{id}` — requires auth and ownership, returns the full review including `source_code` and findings
 
 Other:
-- `GET /api/health` — returns `{"status": "ok"}`
+- `GET /api/health` — returns `{"status": "ok", "engines": ["rules", "taint", "secrets", "ast", "sinks", "quality"]}`
 
-## Running without an API key
+A finding is returned as:
 
-The application is fully functional with no API key and no internet connection. The static
-scanner is a local regex engine over 14 rules, so a review completes in roughly 15
-milliseconds and returns real findings with a real score.
-
-An API key is optional and only adds a second opinion. When `LLM_API_KEY` is empty the
-model is never contacted. When a key is set but the endpoint is unreachable, the request
-fails over to static findings rather than erroring, so a bad key can never break a review.
-
-To enable the LLM review, get a free key and set one variable:
-
+```json
+{
+  "rule_id": "TAINT001",
+  "title": "Untrusted data reaches a dangerous call",
+  "severity": "high",
+  "line": 3,
+  "explanation": "...",
+  "suggestion": "...",
+  "source": "taint",
+  "fixed_snippet": null,
+  "evidence": "os.system(user_input)",
+  "confidence": "high",
+  "related_lines": []
+}
 ```
-LLM_API_KEY=your-key-here
-```
 
-That is the only change needed. The default endpoint is the Gemini free tier through its
-OpenAI-compatible interface, so `LLM_BASE_URL` and `LLM_MODEL` can stay as they are. Any
-other OpenAI-compatible endpoint works by changing those two values instead.
+`source` is one of `static`, `taint`, `secrets`, `ast`, `sinks` or `quality`, which lets the UI label where a finding came from.
+
+## No API key required
+
+There is nothing to configure and nothing to download. The engine is pure Python standard library: `ast` for Python parsing and a hand-written tokenizer for everything else. A review of a few hundred lines completes in milliseconds and is deterministic for a given input.
+
+The project name is kept for continuity, but no language model is involved at review time.
 
 ## Configuration
 
-Copy `backend/.env.example` to `backend/.env` and edit the values:
+Copy `backend/.env.example` to `backend/.env` and edit the value:
 
 ```
 SECRET_KEY=replace-with-a-random-32-byte-string
-LLM_API_KEY=
-LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-LLM_MODEL=gemini-2.0-flash
-LLM_TIMEOUT_SECONDS=30
 ```
 
 - `SECRET_KEY` — signing key for JWT tokens. Must be at least 32 bytes for HS256. Replace the default before any real use, otherwise anyone can forge tokens.
-- `LLM_API_KEY` — API key for the language model. Leave empty to run static analysis only.
-- `LLM_BASE_URL` — base URL of an OpenAI-compatible chat completions endpoint.
-- `LLM_MODEL` — model name to request.
-- `LLM_TIMEOUT_SECONDS` — how long to wait for the model before falling back to static findings.
+
+That is the only setting. `DATABASE_URL` and `TOKEN_EXPIRE_DAYS` also exist in `app/config.py` with working defaults and can be overridden through the environment.
 
 ## How to run
 
@@ -149,7 +171,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# edit .env if you want LLM review
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -189,11 +210,11 @@ npm run build
 
 ## Design notes
 
-- The static scanner uses pure-Python regex rules and requires no external binaries or API keys, so the tool produces results even without configuring an LLM.
-- LLM responses are parsed as strict JSON; malformed responses are discarded safely and static findings are still returned.
-- Findings from static scan and LLM review are merged and deduplicated by line, severity, and title before scoring.
-- Score starts at 100 and is reduced per finding: critical -20, high -10, medium -5, low -2, floored at 0.
-- Frontend styling avoids AI-template defaults: no purple gradients, no emoji icons, no generated look. Severity uses color semantics (red critical, orange high, amber medium, gray low) and all interactive elements have visible focus states.
+- Every pass is deterministic and offline. No pass can fail a review: a pass that cannot parse the source returns no findings rather than raising.
+- Taint analysis runs in two phases. The first works bottom-up and computes, per function, whether data flows to a sink or a return value, without assuming any parameter is tainted. The second walks top-down from real sources, so a helper called with a constant does not produce a false positive.
+- The score starts at 100 and is reduced per finding: critical 20, high 10, medium 5, low 2. Repeated findings of the same severity are damped — full weight, then 70%, 50%, 35%, and 30% for everything after — because a linear penalty drove any realistic file to 0 and made the number meaningless.
+- Frontend styling avoids AI-template defaults: no purple gradients, no emoji icons, no generated look. The interface uses a "Graded Paper" palette — warm paper background, cobalt accent, a dark code panel — with severity rendered as rubber-stamp badges, flagged lines underlined in red pen, and the score drawn as a circled grade.
+- All interactive elements have visible focus states.
 
 ## License
 
