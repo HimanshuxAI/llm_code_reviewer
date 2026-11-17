@@ -1,0 +1,49 @@
+import time
+
+from app.analysis.engine import analyse
+
+
+VULNERABLE = 'import os\npassword = "hunter2hunter2"\nos.system("ls " + input())\n'
+
+
+def test_analyse_python_finds_multiple_classes():
+    findings = analyse(VULNERABLE, "python")
+    assert any(f["rule_id"] == "SEC003" for f in findings)
+    assert any(f["rule_id"] == "SEC010" for f in findings)
+
+
+def test_analyse_comments_are_not_flagged():
+    findings = analyse('# password = "hunter2hunter2"\nx = 1\n', "python")
+    assert findings == []
+
+
+def test_analyse_finds_aws_key():
+    findings = analyse('AWS_KEY = "AKIAIOSFODNN7EXAMPLE"\n', "python")
+    assert any(f["source"] == "secrets" for f in findings)
+
+
+def test_findings_have_evidence_and_confidence():
+    for f in analyse(VULNERABLE, "python"):
+        assert "evidence" in f
+        assert f["confidence"] in ("high", "medium")
+        assert "related_lines" in f
+
+
+def test_deduped_by_line_severity_title():
+    findings = analyse(VULNERABLE, "python")
+    keys = [(f["line"], f["severity"], f["title"].lower()) for f in findings]
+    assert len(keys) == len(set(keys))
+
+
+def test_analyser_handles_garbage_input():
+    assert isinstance(analyse("\x00\x01 def (", "python"), list)
+    assert isinstance(analyse("}", "text"), list)
+
+
+def test_performance_budget():
+    code = (VULNERABLE * 2000)[:50000]  # under the 50k limit
+    t0 = time.perf_counter()
+    findings = analyse(code, "python")
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 2.0
+    assert findings
