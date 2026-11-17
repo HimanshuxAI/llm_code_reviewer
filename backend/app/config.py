@@ -8,10 +8,5 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-change-me-to-a-real-32-byte-key"
     token_expire_days: int = 30
 
-    llm_api_key: str = ""
-    llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
-    llm_model: str = "gemini-2.0-flash"
-    llm_timeout_seconds: int = 30
-
 
 settings = Settings()

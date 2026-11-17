@@ -4,12 +4,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.config import settings
 from app.db.models import Base
 from app.db.session import get_db
 from app.main import app
-
-settings.llm_api_key = ""  # force static-only pipeline in tests
 
 _test_engine = create_engine(
     "sqlite://",
