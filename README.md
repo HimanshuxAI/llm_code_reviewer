@@ -62,6 +62,8 @@ Frontend:
 
 ```
 llm_code_reviewer/
+Dockerfile            builds the frontend and serves it from FastAPI
+.dockerignore
 backend/
   app/
     main.py            FastAPI app, CORS, lifespan startup, health endpoint, router mounting
@@ -159,7 +161,91 @@ SECRET_KEY=replace-with-a-random-32-byte-string
 
 - `SECRET_KEY` — signing key for JWT tokens. Must be at least 32 bytes for HS256. Replace the default before any real use, otherwise anyone can forge tokens.
 
-That is the only setting. `DATABASE_URL` and `TOKEN_EXPIRE_DAYS` also exist in `app/config.py` with working defaults and can be overridden through the environment.
+That is the only setting for local development. `DATABASE_URL` and `TOKEN_EXPIRE_DAYS` also exist in `app/config.py` with working defaults and can be overridden through the environment.
+
+### Environment variables
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `SECRET_KEY` | a dev placeholder | JWT signing key. Set this in any deployment. |
+| `DATABASE_URL` | `sqlite:///./reviews.db` | SQLAlchemy URL. Point it at a mounted volume so reviews survive a restart. |
+| `CORS_ORIGINS` | the two local dev servers | Comma-separated browser origins. Only needed when the frontend is served from a different host than the API. |
+| `STATIC_DIR` | unset | Directory of the built frontend to serve from the same origin. Unset in development. |
+| `PORT` | `8000` | Port the server listens on. |
+| `TOKEN_EXPIRE_DAYS` | `30` | How long a login stays valid. |
+
+## Deploying
+
+The app is a FastAPI server and a static frontend. Two ways to put it online.
+
+### Option 1 — one container (recommended)
+
+The `Dockerfile` builds the React app and serves it from FastAPI, so the whole
+thing runs on one origin and there is no CORS to configure.
+
+```
+docker build -t code-reviewer .
+docker run -d -p 8000:8000 \
+  -e SECRET_KEY="a-real-random-32-byte-secret-key" \
+  -v code-reviewer-data:/app/data \
+  code-reviewer
+```
+
+Then open `http://localhost:8000`.
+
+The `/app/data` volume holds the SQLite file. Without a volume the reviews are
+lost when the container is replaced.
+
+That image runs as-is on **Render**, **Railway**, **Fly.io**, **Google Cloud Run**,
+**AWS ECS**, or any VPS with Docker. On Render and Railway, point the service at
+the `Dockerfile` in the repository root, add a disk mounted at `/app/data`, and
+set `SECRET_KEY`.
+
+### Option 2 — frontend and backend on separate hosts
+
+Deploy the frontend to **Vercel** or **Netlify** and the backend to **Render**,
+**Railway** or **Fly.io**.
+
+Frontend build settings:
+
+```
+Build command:       npm run build
+Output directory:    dist
+Environment:         VITE_API_BASE=https://your-backend.example.com
+```
+
+Backend settings:
+
+```
+Environment:         SECRET_KEY=<random 32+ bytes>
+                     CORS_ORIGINS=https://your-frontend.vercel.app
+                     DATABASE_URL=sqlite:////data/reviews.db
+```
+
+`VITE_API_BASE` is baked into the frontend bundle at build time, so set it
+before the build runs. `CORS_ORIGINS` must list the frontend's exact origin.
+
+### Before you go live
+
+- Set `SECRET_KEY` to a random value of at least 32 bytes. The default in the
+  repository is a placeholder, and anyone who knows it can forge tokens.
+- Mount a persistent disk for the database, or point `DATABASE_URL` at a hosted
+  Postgres and add the driver to `backend/requirements.txt`.
+- The review source code is stored verbatim. If you deploy this for other
+  people, that is their code sitting in your database — worth saying in your
+  privacy note.
+
+### Checking a deployment
+
+```
+curl https://your-app.example.com/api/health
+```
+
+Expected:
+
+```json
+{"status": "ok", "engines": ["rules", "taint", "secrets", "ast", "sinks", "quality"]}
+```
 
 ## How to run
 
@@ -185,6 +271,13 @@ npm run dev
 ```
 
 The app is available at `http://localhost:5173` and calls the backend at `http://localhost:8000`.
+
+To run the built frontend from the backend on one port, as a deployment does:
+
+```
+cd frontend && npm run build && cd ..
+cd backend && STATIC_DIR=../frontend/dist .venv/bin/uvicorn app.main:app --port 8000
+```
 
 Run backend tests:
 
