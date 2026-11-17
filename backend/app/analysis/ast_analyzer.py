@@ -9,6 +9,41 @@ AUTH_PARTS = ("admin", "auth", "permission", "role", "staff", "superuser")
 
 BROAD_EXCEPTIONS = frozenset({"Exception", "BaseException"})
 
+# Names defined by Python itself (builtins) plus names the engine treats as
+# always-available so they are never flagged as undefined.
+BUILTINS = frozenset({
+    "abs", "all", "any", "ascii", "bin", "bool", "breakpoint", "bytearray",
+    "bytes", "callable", "chr", "classmethod", "compile", "complex", "copyright",
+    "credits", "delattr", "dict", "dir", "divmod", "enumerate", "eval", "exec",
+    "exit", "filter", "float", "format", "frozenset", "getattr", "globals",
+    "hasattr", "hash", "help", "hex", "id", "input", "int", "isinstance",
+    "issubclass", "iter", "len", "license", "list", "locals", "map", "max",
+    "memoryview", "min", "next", "object", "oct", "open", "ord", "pow", "print",
+    "quit", "range", "repr", "reversed", "round", "set", "setattr", "slice",
+    "sorted", "staticmethod", "str", "sum", "super", "tuple", "type", "vars",
+    "zip", "__import__",
+    # builtin exceptions
+    "ArithmeticError", "AssertionError", "AttributeError", "BaseException",
+    "BlockingIOError", "BrokenPipeError", "BufferError", "BytesWarning",
+    "ChildProcessError", "ConnectionAbortedError", "ConnectionError",
+    "ConnectionRefusedError", "ConnectionResetError", "DeprecationWarning",
+    "EOFError", "Ellipsis", "EnvironmentError", "Exception", "False",
+    "FileExistsError", "FileNotFoundError", "FloatingPointError",
+    "FutureWarning", "GeneratorExit", "IOError", "ImportError",
+    "ImportWarning", "IndentationError", "IndexError", "InterruptedError",
+    "IsADirectoryError", "KeyError", "KeyboardInterrupt", "LookupError",
+    "MemoryError", "ModuleNotFoundError", "NameError", "None",
+    "NotADirectoryError", "NotImplemented", "NotImplementedError",
+    "OSError", "OverflowError", "PendingDeprecationWarning",
+    "PermissionError", "ProcessLookupError", "RecursionError",
+    "ReferenceError", "ResourceWarning", "RuntimeError", "RuntimeWarning",
+    "StopIteration", "SyntaxError", "SyntaxWarning", "SystemError",
+    "SystemExit", "TabError", "TimeoutError", "True", "TypeError",
+    "UnboundLocalError", "UnicodeDecodeError", "UnicodeEncodeError",
+    "UnicodeError", "UnicodeTranslateError", "UnicodeWarning", "UserWarning",
+    "ValueError", "Warning", "ZeroDivisionError",
+})
+
 
 def _dotted(node):
     if isinstance(node, ast.Name):
@@ -127,8 +162,14 @@ class _Frame:
 class _Checker(ast.NodeVisitor):
     def __init__(self, imported):
         self.scopes = [_Frame("module")]  # persistent module frame
+        self.defined = [set()]            # parallel: every bound name per scope
         self.findings = []
         self.imported = imported
+        # Imported names are defined at module level (a *-import can't be
+        # resolved statically, so its names may still be flagged).
+        for name in imported:
+            if name != "*":
+                self.defined[0].add(name)
 
     # ---- scope helpers
     def _register(self, key):
@@ -158,10 +199,21 @@ class _Checker(ast.NodeVisitor):
                 return False
         return False
 
-    def _open_scope(self, kind): self.scopes.append(_Frame(kind))
+    def _define(self, name):
+        if name:
+            self.defined[-1].add(name)
+
+    def _is_defined(self, name):
+        for scope in reversed(self.defined):
+            if name in scope:
+                return True
+        return False
+
+    def _open_scope(self, kind): self.scopes.append(_Frame(kind)); self.defined.append(set())
 
     def _close_scope(self, merge_dotted=False):
         frame = self.scopes.pop()
+        self.defined.pop()
         if not merge_dotted:
             return
         # dotted keys from a function frame merge into their parent only when
@@ -183,11 +235,15 @@ class _Checker(ast.NodeVisitor):
                 parent.reg.discard(key)
 
     def visit_FunctionDef(self, node):
+        # the function name is bound in the enclosing scope, before the body
+        # scope opens (so a nested function is visible in its parent)
+        self._define(node.name)
         self._open_scope("function")
         # parameters bind names: they tombstone within the function so a
         # module-level client never leaks in through a same-named parameter
         for name in _param_names(node):
             self._unregister(name)
+            self._define(name)
         self._check_function_defaults(node)
         self.generic_visit(node)
         # dotted keys merge into the parent frame, but only when that frame is
@@ -204,12 +260,12 @@ class _Checker(ast.NodeVisitor):
         self._open_scope("with")
         for name in _param_names(node):
             self._unregister(name)
+            self._define(name)
         self.generic_visit(node)
         self._close_scope()
 
     def visit_ClassDef(self, node):
-        # one frame per class body, persisted while the class is visited, so
-        # all methods of the class see the same registrations
+        self._define(node.name)
         self._open_scope("class")
         self.generic_visit(node)
         self._close_scope()
@@ -219,6 +275,7 @@ class _Checker(ast.NodeVisitor):
         keys = [k for t in node.targets for k in _binding_keys(t)]
         for key in keys:
             self._unregister(key)
+            self._define(key)
         if _is_client_constructor(node.value, self.imported):
             for key in keys:
                 self._register(key)
@@ -229,6 +286,7 @@ class _Checker(ast.NodeVisitor):
             keys = list(_binding_keys(node.target))
             for key in keys:
                 self._unregister(key)
+                self._define(key)
             if _is_client_constructor(node.value, self.imported):
                 for key in keys:
                     self._register(key)
@@ -241,6 +299,7 @@ class _Checker(ast.NodeVisitor):
         keys = list(_binding_keys(node.target))
         for key in keys:
             self._unregister(key)
+            self._define(key)
         if _is_client_constructor(node.value, self.imported):
             for key in keys:
                 self._register(key)
@@ -251,6 +310,7 @@ class _Checker(ast.NodeVisitor):
         # does not leak into the loop body
         for key in _binding_keys(node.target):
             self._unregister(key)
+            self._define(key)
         self.generic_visit(node)
 
     def visit_AsyncFor(self, node):
@@ -267,6 +327,7 @@ class _Checker(ast.NodeVisitor):
         for gen in node.generators:
             for key in _binding_keys(gen.target):
                 self._unregister(key)
+                self._define(key)
         self.generic_visit(node)
         self._close_scope()
 
@@ -285,6 +346,7 @@ class _Checker(ast.NodeVisitor):
             # binding from outside never leaks into a non-client block
             for key in keys:
                 self._unregister(key)
+                self._define(key)
             if _is_client_constructor(item.context_expr, self.imported):
                 for key in keys:
                     self._register(key)
@@ -297,7 +359,36 @@ class _Checker(ast.NodeVisitor):
     def visit_Call(self, node):
         self._check_http_call(node)
         self._check_open_call(node)
+        # bare-name funcs are visited by visit_Name via generic_visit; only
+        # attribute funcs (os.path.join) need an explicit check here
+        if isinstance(node.func, ast.Attribute):
+            self._check_undefined_name(node.func)
         self.generic_visit(node)
+
+    def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Load):
+            self._check_undefined_name(node)
+        self.generic_visit(node)
+
+    def _check_undefined_name(self, node):
+        # Flag names read but never bound anywhere visible: undefined variables,
+        # typos, missing imports. Builtins and anything already registered are
+        # skipped. Attribute loads (foo.bar) defer to the base name only.
+        if isinstance(node, ast.Attribute):
+            name = _dotted(node.value)
+        else:
+            name = getattr(node, "id", None)
+        if not name or name in BUILTINS:
+            return
+        # For dotted loads (os.path.join) only the root must be defined.
+        root = name.split(".")[0]
+        if self._is_defined(root):
+            return
+        self._add("PY003", f"Undefined name '{name}'", "high",
+                  node.lineno,
+                  f"'{name}' is used but never defined or imported, so it raises NameError at runtime.",
+                  f"Define '{name}' or import it before use.",
+                  name)
 
     def visit_Assert(self, node):
         if self._assert_is_auth(node):
@@ -323,6 +414,7 @@ class _Checker(ast.NodeVisitor):
         self._open_scope("with")
         if node.name:
             self._unregister(node.name)
+            self._define(node.name)
         self.generic_visit(node)
         self._close_scope()
 

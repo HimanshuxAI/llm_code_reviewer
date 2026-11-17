@@ -524,3 +524,55 @@ def test_from_import_api_dotted_call_is_flagged():
         "api.get('http://x')\n"
     )
     assert any(f["rule_id"] == "PY002" for f in analyse_python(code))
+
+
+def test_undefined_name_is_flagged():
+    code = "hello('print')\n"
+    findings = analyse_python(code)
+    py003 = [f for f in findings if f["rule_id"] == "PY003"]
+    assert len(py003) == 1
+    assert py003[0]["line"] == 1
+    assert "hello" in py003[0]["title"]
+
+
+def test_defined_then_used_is_not_flagged():
+    code = "x = 1\nprint(x)\n"
+    assert not any(f["rule_id"] == "PY003" for f in analyse_python(code))
+
+
+def test_builtins_are_not_flagged():
+    code = "print(len([1, 2]))\n"
+    assert not any(f["rule_id"] == "PY003" for f in analyse_python(code))
+
+
+def test_function_defined_then_called_is_not_flagged():
+    code = "def foo():\n    return 1\nfoo()\n"
+    assert not any(f["rule_id"] == "PY003" for f in analyse_python(code))
+
+
+def test_class_defined_then_instantiated_is_not_flagged():
+    code = "class A:\n    pass\nA()\n"
+    assert not any(f["rule_id"] == "PY003" for f in analyse_python(code))
+
+
+def test_imported_module_is_not_flagged():
+    code = "import os\nos.path.join('a', 'b')\n"
+    assert not any(f["rule_id"] == "PY003" for f in analyse_python(code))
+
+
+def test_loop_var_is_not_flagged():
+    code = "for i in range(5):\n    print(i)\n"
+    assert not any(f["rule_id"] == "PY003" for f in analyse_python(code))
+
+
+def test_except_as_name_is_not_flagged():
+    code = "try:\n    pass\nexcept Exception as e:\n    print(e)\n"
+    assert not any(f["rule_id"] == "PY003" for f in analyse_python(code))
+
+
+def test_typo_is_flagged():
+    code = "prnt('hi')\n"
+    findings = analyse_python(code)
+    py003 = [f for f in findings if f["rule_id"] == "PY003"]
+    assert len(py003) == 1
+    assert "prnt" in py003[0]["title"]
