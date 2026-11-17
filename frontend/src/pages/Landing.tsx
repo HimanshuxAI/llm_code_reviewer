@@ -195,7 +195,7 @@ export default function Landing() {
             <div className="step-row">
               <div className="step-num">02</div>
               <div>
-                <h3 className="step-title">Static heuristic scan</h3>
+                <h3 className="step-title">Regex security rules</h3>
                 <p className="step-body">
                   Fourteen pattern rules run over every line — hardcoded
                   secrets, SQL injection, unsafe eval, weak crypto, buffer
