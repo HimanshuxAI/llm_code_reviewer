@@ -17,11 +17,13 @@ class Func:
     token phases bind call arguments to parameters by that position.
     """
 
-    def __init__(self, name, params, body):
+    def __init__(self, name, params, body, start_line=None, end_line=None):
         self.name = name
         self.params = params
         self.param_index = {p: i for i, p in enumerate(params)}
         self.body = body
+        self.start_line = start_line
+        self.end_line = end_line
         self.flows_to_sink = set()
         self.flows_to_return = set()
         self.source_locals = set()
@@ -88,7 +90,9 @@ def function_inventory(source, language):
             return {}
         body = tokens[j + 1:k - 1]
         if tok.text not in functions:
-            functions[tok.text] = Func(tok.text, params, body)
+            functions[tok.text] = Func(tok.text, params, body,
+                                       start_line=tok.line,
+                                       end_line=tokens[k - 1].line)
         i = k
     return functions
 

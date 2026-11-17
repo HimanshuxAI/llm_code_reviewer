@@ -1,7 +1,7 @@
 """Maintainability checks. Python via AST; other languages via tokens."""
 import ast
 
-from app.analysis.tokenizer import tokenize_source
+from app.analysis.tokens import function_inventory
 
 MAX_FINDINGS = 60
 MAX_LINES = 60
@@ -115,19 +115,52 @@ def _analyse_python(source_code: str) -> list[dict]:
     return findings[:MAX_FINDINGS]
 
 
-def _analyse_generic(source_code: str, language: str) -> list[dict]:
-    tokens = tokenize_source(source_code, language)
-    findings = []
+def _generic_metrics(func):
+    """Line count, complexity, nesting depth and parameter count.
+
+    Complexity counts decision keywords in the body; nesting counts the
+    deepest brace level reached inside it. A nested function's keywords are
+    counted in the outer function as well — an approximation, and the same
+    one the token-based taint pass makes.
+    """
+    complexity = 1
     depth = 0
-    for tok in tokens:
-        if tok.text == "{":
+    max_depth = 0
+    for tok in func.body:
+        if tok.text in _DECISION_KW:
+            complexity += 1
+        elif tok.text == "{":
             depth += 1
+            max_depth = max(max_depth, depth)
         elif tok.text == "}":
             depth -= 1
-    if depth > MAX_NESTING:
-        findings.append(_finding("QUAL009", "Nesting is too deep", 1,
-            f"Nesting goes {depth} levels deep.",
-            "Return early or extract inner logic."))
+    lines = 0
+    if func.start_line and func.end_line:
+        lines = func.end_line - func.start_line + 1
+    return lines, complexity, max_depth, len(func.params)
+
+
+def _analyse_generic(source_code: str, language: str) -> list[dict]:
+    findings = []
+    for func in function_inventory(source_code, language).values():
+        lines, complexity, nesting, params = _generic_metrics(func)
+        where = func.start_line or 1
+        if lines > MAX_LINES:
+            findings.append(_finding("QUAL007", "Function is too long", where,
+                f"This function has {lines} lines; long functions are hard to review and test.",
+                "Split it into smaller functions with single responsibilities."))
+        if complexity > MAX_COMPLEXITY:
+            findings.append(_finding("QUAL008", "Cyclomatic complexity is too high", where,
+                f"Complexity is {complexity}; this function has too many branches.",
+                "Extract branches into named helpers."))
+        if nesting > MAX_NESTING:
+            findings.append(_finding("QUAL009", "Nesting is too deep", where,
+                f"Nesting goes {nesting} levels deep.",
+                "Return early or extract inner logic."))
+        if params > MAX_PARAMS:
+            findings.append(_finding("QUAL010", "Too many parameters", where,
+                f"{params} parameters; callers struggle to use this correctly.",
+                "Group related arguments into an object or config."))
     # Line-based scan of raw source; see the note in _analyse_python.
     for lineno, line in enumerate(source_code.splitlines(), start=1):
         s = line.strip()
