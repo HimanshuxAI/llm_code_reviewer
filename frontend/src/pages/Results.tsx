@@ -4,6 +4,7 @@ import { getReview } from "../api";
 import { type ReviewDetail } from "../api";
 import Workspace from "../components/Workspace";
 import EmptyState from "../components/EmptyState";
+import ScoreDial from "../components/ScoreDial";
 import { FileCode2, Check } from "lucide-react";
 
 export default function Results() {
@@ -104,6 +105,7 @@ export default function Results() {
               {review.findings.length}
             </span>
           </div>
+          <ScoreDial score={review.score} />
           <div className="inspector-body">
             {review.findings.length === 0 ? (
               <div className="flex flex-col items-center py-8 text-center">
