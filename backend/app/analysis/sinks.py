@@ -27,8 +27,11 @@ SOURCES = {
 }
 
 SINKS = {
+    # "run" covers subprocess.run(..., shell=True); the taint gate (an
+    # untrusted argument must reach the call) keeps ordinary .run() calls
+    # clean, so only tainted-argument runs fire.
     "python": {"system", "popen", "eval", "exec", "execute",
-               "loads", "load"},
+               "run", "loads", "load"},
     "javascript": {"eval", "write", "exec", "Function", "html"},
     "java": {"exec", "execute", "ProcessBuilder", "readObject", "forName"},
     "c": {"system", "popen", "gets", "strcpy", "sprintf"},

@@ -92,13 +92,49 @@ A call to a helper whose return value is tainted produces tainted data.
   `cursor.execute`, `pickle.loads`, `innerHTML=`, `document.write`, `Runtime.exec`,
   `system()`, `strcpy`, `gets`
 
+`subprocess.run` is matched by the bare name `run`; the taint gate (an untrusted
+argument must reach the call) keeps ordinary `.run()` calls clean, so
+`subprocess.run(["ls"], shell=False)` stays silent and only tainted-argument runs fire.
+
+**Source anchoring.** A broad source word counts only with positional context. In the
+token languages a source word must be call-shaped (`prompt(`), or a property of a member
+chain rooted at a parameter of the current function or at another source name
+(`req.query.name`, `params.mode`). A bare mention does not count: `cfg.query` on a plain
+local and an object-literal key (`{ query: "users" }`) never fire, and `==`/`===` are
+never treated as assignment (the scanner emits `=` character-wise, so an assignment
+requires the next token to be `=` and the one after not to be).
+
+**Python assignment forms.** Taint propagates through `Assign`, `AugAssign`
+(`cmd += input()` re-taints the target), `AnnAssign`, walrus `NamedExpr`, and tuple
+unpacking (`a, b = input(), "x"` taints each `Name` target). Attribute sources count by
+their attribute name: `sys.argv`, `request.args`, including subscripts over them.
+
+**Precedence: user-defined functions shadow same-named sources.** When a file defines
+`def get(key)`, a call `get("cmd")` resolves to that function and its own parameter flows
+decide; the source list never fires for the name. This holds in both phases.
+
 **Cross-function reach for all five languages.** Python resolves function boundaries from
 the AST. The other four languages use brace matching over the token stream to find function
-bodies, with a per-language name extractor.
+bodies, with a per-language name extractor. Control-flow keywords (`if`, `else`, `while`,
+`for`, `switch`, `catch`, `do`, `try`, `return`, `with`, `function`, `class`) never
+register a function, so top-level `if (cond) { ... }` headers do not become phantom
+definitions that swallow mis-propagated taint. Tokens between a parameter list's `)` and
+the body `{` (a Java `throws IOException` clause, a comma-separated exception list) are
+skipped, so every-`throws` Java methods are still discovered; a `;` there marks a
+prototype, which is not a definition.
 
-Function names can collide. When two functions share a name, the engine reports only
-intra-procedural findings for that name and marks cross-function results as medium
-confidence. A file whose braces do not balance falls back to intra-procedural analysis.
+**Top-level statements are scanned.** Each token-language file gets one `__module__`
+pseudo-function built from its depth-0 token segment, so top-level code in a file that
+also defines functions is analysed — including calls into real functions with tainted
+arguments. Braces are excluded from that segment, which deliberately narrows the scan:
+the body of a top-level `if (...) { ... }` sits inside its braces and is not scanned.
+
+Phase 2 propagation runs at most 50 passes. Very deep definition-order-dependent chains
+may be truncated, deterministically for a given input.
+
+Function names can collide. When two functions share a name, the token inventory keeps
+the first registration and skips later ones, so a call site never binds its arguments to
+the wrong body. A file whose braces do not balance falls back to intra-procedural analysis.
 
 **Confidence.** A finding carries `high` when tainted data reaches a sink inside one
 function. It carries `medium` when the flow crosses a function boundary, because that
