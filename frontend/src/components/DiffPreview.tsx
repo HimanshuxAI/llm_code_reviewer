@@ -6,14 +6,14 @@ interface DiffPreviewProps {
 export default function DiffPreview({ source_code, fixed_snippet }: DiffPreviewProps) {
   return (
     <div className="diff-wrap">
-      <div className="diff-pane">
+      <div className="diff-pane diff-pane-del">
         <div className="diff-header original">
           <span>Original code</span>
         </div>
         <pre className="diff-content">{source_code}</pre>
       </div>
       {fixed_snippet ? (
-        <div className="diff-pane">
+        <div className="diff-pane diff-pane-add">
           <div className="diff-header fixed">
             <span>Suggested fix</span>
           </div>

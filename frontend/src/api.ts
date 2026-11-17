@@ -35,6 +35,9 @@ export interface Finding {
   suggestion: string;
   source: string;
   fixed_snippet: string | null;
+  evidence?: string;
+  confidence?: "high" | "medium";
+  related_lines?: number[];
 }
 
 export interface ReviewSummary {

@@ -97,20 +97,16 @@ export default function Submit() {
               onChange={handleFile}
             />
 
-            {error && (
-              <div className="rounded bg-red-50 border border-red-100 px-3 py-2 text-sm text-red-700">
-                {error}
-              </div>
-            )}
+            {error && <div className="form-error">{error}</div>}
 
             <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14, marginTop: 6 }}>
               <p className="inspector-title mb-3">Pipeline</p>
               <ol style={{ listStyle: "none", padding: 0 }} className="space-y-2">
                 {[
                   "Detect language",
-                  "Static heuristic scan",
-                  "LLM review (if configured)",
-                  "Merge and score",
+                  "Regex security rules",
+                  "Taint tracking (source to sink)",
+                  "Secret detection & quality",
                 ].map((step, i) => (
                   <li
                     key={step}

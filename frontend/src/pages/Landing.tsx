@@ -50,10 +50,10 @@ export default function Landing() {
       </div>
 
       <main>
-        <section className="page">
+        <section className="page paper-lines">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
-              <p className="eyebrow mb-6">Static analysis + LLM review</p>
+              <p className="eyebrow mb-6">Built-in analysis engine</p>
               <h1 className="display mb-7">
                 Find the bug before
                 <br />
@@ -199,18 +199,20 @@ export default function Landing() {
                 <p className="step-body">
                   Fourteen pattern rules run over every line — hardcoded
                   secrets, SQL injection, unsafe eval, weak crypto, buffer
-                  risks. This always runs, even with no API key configured.
+                  risks. Comments are masked first, so commented-out code is
+                  not flagged.
                 </p>
               </div>
             </div>
             <div className="step-row">
               <div className="step-num">03</div>
               <div>
-                <h3 className="step-title">LLM review</h3>
+                <h3 className="step-title">Built-in analysis engine</h3>
                 <p className="step-body">
-                  The code goes to a language model that returns structured
-                  findings with explanations and corrected snippets. Works with
-                  any OpenAI-compatible endpoint.
+                  Six local analysis passes run over your code: dataflow
+                  tracking, secret detection by entropy, Python AST checks,
+                  per-language dangerous patterns, and quality metrics.
+                  Nothing leaves your machine.
                 </p>
               </div>
             </div>
@@ -265,7 +267,7 @@ export default function Landing() {
         </section>
       </main>
 
-      <footer className="border-t border-line bg-white/60">
+      <footer className="site-footer">
         <div className="page py-8 flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm text-ink-soft">
             <div className="brand-mark" style={{ width: 16, height: 16 }} />

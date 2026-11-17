@@ -110,7 +110,7 @@ export default function Results() {
                 <Check className="h-8 w-8 text-success mb-3" />
                 <p className="text-sm font-bold text-ink">No issues found</p>
                 <p className="text-xs text-muted mt-1">
-                  Static scan and AI review both came back clean.
+                  Every analysis pass came back clean.
                 </p>
               </div>
             ) : (
@@ -121,8 +121,25 @@ export default function Results() {
                   </div>
                   <div className="issue-meta">
                     {f.rule_id} · line {f.line} · {f.source}
+                    {f.confidence === "medium" && (
+                      <span style={{ color: "var(--warn)" }}>
+                        {" "}· inferred (medium confidence)
+                      </span>
+                    )}
                   </div>
                   <p className="issue-text">{f.explanation}</p>
+                  {f.evidence && (
+                    <pre
+                      className="issue-fix"
+                      style={{
+                        background: "var(--card)",
+                        borderColor: "var(--rule)",
+                        color: "var(--ink-soft)",
+                      }}
+                    >
+                      {f.evidence}
+                    </pre>
+                  )}
                   {f.fixed_snippet && <pre className="issue-fix">{f.fixed_snippet}</pre>}
                 </div>
               ))
@@ -143,7 +160,14 @@ export default function Results() {
           ))}
         </div>
         <div className="ide-code">
-          <pre>{source}</pre>
+          <pre>
+            {lines.map((line, i) => (
+              <span key={i} className={flagged.has(i + 1) ? "tok-flag" : undefined}>
+                {line}
+                {"\n"}
+              </span>
+            ))}
+          </pre>
         </div>
       </div>
     </Workspace>
