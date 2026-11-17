@@ -129,6 +129,14 @@ also defines functions is analysed — including calls into real functions with 
 arguments. Braces are excluded from that segment, which deliberately narrows the scan:
 the body of a top-level `if (...) { ... }` sits inside its braces and is not scanned.
 
+Python gets the same treatment. Top-level statements form a `__module__` frame, so a
+module-level script — `name = input()` followed by `os.system(name)` — is analysed
+rather than skipped; that is the shape most submitted code has. The module frame's walk
+does not descend into a def or class nested under a module-level `if`/`try`: those are
+frames of their own, and crediting their bindings to module scope would let a module
+source-local shadow one of their parameters. A source-to-sink flow inside one module
+frame is high confidence, exactly as it is inside a function.
+
 Phase 2 propagation runs at most 50 passes. Very deep definition-order-dependent chains
 may be truncated, deterministically for a given input.
 

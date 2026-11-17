@@ -63,7 +63,11 @@ def test_get_single_review_returns_source_code(client, auth_headers):
     body = resp.json()
     assert "source_code" in body
     assert body["source_code"] == VULNERABLE
-    assert len(body["findings"]) == 2
+    rule_ids = {f["rule_id"] for f in body["findings"]}
+    assert {"SEC003", "SEC010"} <= rule_ids
+    # The sample ends in os.system("ls " + input()) at module level, so the
+    # taint pass reports the untrusted value reaching the shell call too.
+    assert "TAINT001" in rule_ids
 
 
 def test_list_reviews_does_not_return_source_code(client, auth_headers):

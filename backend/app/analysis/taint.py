@@ -39,15 +39,19 @@ OUTPUT_SOURCES = {"gets", "fgets", "scanf", "fscanf", "recv", "readLine",
 
 
 class FunctionInfo:
-    def __init__(self, node):
+    def __init__(self, node, name=None):
         self.node = node
-        self.name = node.name
-        self.params = [a.arg for a in node.args.args]
+        self.name = name if name is not None else node.name
+        args = getattr(node, "args", None)
+        self.params = [a.arg for a in args.args] if args else []
         self.param_index = {p: i for i, p in enumerate(self.params)}
         self.flows_to_sink = set()
         self.flows_to_return = set()
         self.source_locals = set()
         self.return_reads_source = False
+        # The module pseudo-function is built from top-level statements;
+        # its walk must not descend into nested defs/classes.
+        self.is_module = self.name == "__module__"
 
 
 def _callee(call):
@@ -120,6 +124,29 @@ def _tainted_params(node, tainted, functions, sources):
     return set()
 
 
+def _walk_frame(f):
+    """Yield the statements of a frame, skipping nested scopes.
+
+    The module pseudo-function is built from top-level statements, but a
+    def or class can still sit nested under a module-level ``if``/``try``.
+    Walking it here would credit its bindings and sinks to module scope and
+    let a module source-local shadow one of its parameters, so nested
+    def/class subtrees are skipped; they are frames of their own.
+    """
+    if not f.is_module:
+        yield from ast.walk(f.node)
+        return
+    todo = list(f.node.body)
+    while todo:
+        n = todo.pop()
+        yield n
+        for child in ast.iter_child_nodes(n):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                  ast.ClassDef)):
+                continue
+            todo.append(child)
+
+
 def _phase1(functions, language):
     sources = SOURCES.get(language, set())
     sinks = SINKS.get(language, set())
@@ -134,7 +161,7 @@ def _phase1(functions, language):
             new_sink = set(f.flows_to_sink)
             new_ret = set(f.flows_to_return)
 
-            for n in ast.walk(f.node):
+            for n in _walk_frame(f):
                 if isinstance(n, ast.Assign):
                     t = taint_of(n.value)
                     for target in n.targets:
@@ -232,7 +259,7 @@ def _phase2(functions, language):
                     return any(tainted(a) for a in node.args)
                 return False
 
-            for n in ast.walk(f.node):
+            for n in _walk_frame(f):
                 if isinstance(n, ast.Assign):
                     is_t = tainted(n.value)
                     for target in n.targets:
@@ -308,6 +335,16 @@ def _analyse_python(source_code: str) -> list[dict]:
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             functions[node.name] = FunctionInfo(node)
+    # Top-level code is its own frame. Student submissions are mostly
+    # module-level scripts, and without this frame every flow in them —
+    # `name = input(); os.system(name)` — was invisible to the engine.
+    # Nested defs and classes are left out: they are frames of their own.
+    toplevel = [n for n in tree.body
+                if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                      ast.ClassDef))]
+    if toplevel and "__module__" not in functions:
+        functions["__module__"] = FunctionInfo(
+            ast.Module(body=toplevel, type_ignores=[]), name="__module__")
     _phase1(functions, "python")
     return _phase2(functions, "python")[:MAX_FINDINGS]
 

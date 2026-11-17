@@ -244,3 +244,55 @@ def test_python_user_function_shadows_same_named_source():
 def test_python_subprocess_run_with_list_stays_clean():
     code = 'import subprocess\ndef h():\n    subprocess.run(["ls"], shell=False)\n'
     assert analyse_taint(code, "python") == []
+
+
+def test_python_module_level_source_to_sink_fires():
+    code = 'import os\nname = input()\nos.system(name)\n'
+    findings = analyse_taint(code, "python")
+    assert len(findings) == 1
+    assert findings[0]["rule_id"] == "TAINT001"
+    assert findings[0]["line"] == 3
+    assert findings[0]["confidence"] == "high"
+
+
+def test_python_module_level_cross_function_flow_fires():
+    code = ('import os\n'
+            'def h(x):\n'
+            '    os.system(x)\n'
+            'name = input()\n'
+            'h(name)\n')
+    findings = analyse_taint(code, "python")
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
+    assert findings[0]["confidence"] == "medium"
+
+
+def test_python_module_level_sys_argv_fires():
+    code = 'import os, sys\nos.system(sys.argv[1])\n'
+    assert analyse_taint(code, "python")
+
+
+def test_python_module_level_augassign_fires():
+    code = 'import os\ncmd = "ls "\ncmd += input()\nos.system(cmd)\n'
+    findings = analyse_taint(code, "python")
+    assert findings and findings[0]["line"] == 4
+
+
+def test_python_module_level_subprocess_run_fires():
+    code = 'import subprocess\nsubprocess.run(input(), shell=True)\n'
+    assert analyse_taint(code, "python")
+
+
+def test_python_module_level_literal_stays_clean():
+    code = 'import os\nos.system("ls")\n'
+    assert analyse_taint(code, "python") == []
+
+
+def test_python_nested_def_parameter_shadows_module_source():
+    """A module source-local must not taint a nested def's parameter."""
+    code = ('import os\n'
+            'name = input()\n'
+            'if True:\n'
+            '    def g(name):\n'
+            '        os.system(name)\n')
+    assert analyse_taint(code, "python") == []
