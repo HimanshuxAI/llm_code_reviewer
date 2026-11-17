@@ -14,7 +14,9 @@ def test_analyse_python_finds_multiple_classes():
 
 def test_analyse_comments_are_not_flagged():
     findings = analyse('# password = "hunter2hunter2"\nx = 1\n', "python")
-    assert findings == []
+    # commented-out secret must not be flagged; only the unused variable remains
+    assert not any(f["rule_id"].startswith("SEC") for f in findings)
+    assert any(f["rule_id"] == "PY004" for f in findings)
 
 
 def test_analyse_finds_aws_key():
@@ -47,3 +49,29 @@ def test_performance_budget():
     elapsed = time.perf_counter() - t0
     assert elapsed < 2.0
     assert findings
+
+
+def test_unused_variable_is_flagged():
+    findings = analyse("x = 1\ny = 2\nprint(y)\n", "python")
+    assert any(f["rule_id"] == "PY004" and "x" in f["title"] for f in findings)
+
+
+def test_used_variable_is_not_flagged():
+    findings = analyse("x = 1\nprint(x)\n", "python")
+    assert not any(f["rule_id"] == "PY004" for f in findings)
+
+
+def test_unreachable_code_after_return_is_flagged():
+    findings = analyse("def f():\n    return 1\n    x = 2\n", "python")
+    assert any(f["rule_id"] == "PY005" for f in findings)
+
+
+def test_code_after_return_in_if_is_reachable():
+    findings = analyse("def f():\n    if True:\n        return 1\n    x = 2\n", "python")
+    # x = 2 is reachable when the if is False
+    assert not any(f["rule_id"] == "PY005" for f in findings)
+
+
+def test_list_mutated_during_iteration_is_flagged():
+    findings = analyse("for x in items:\n    items.append(x)\n", "python")
+    assert any(f["rule_id"] == "PY006" for f in findings)

@@ -1,5 +1,6 @@
 """Run every pass and return merged, deduplicated findings."""
 from app.analysis.ast_analyzer import analyse_python
+from app.analysis.bugs import detect_bugs
 from app.analysis.detect import detect_language
 from app.analysis.quality import detect_quality_issues
 from app.analysis.secrets import detect_secrets
@@ -54,6 +55,7 @@ def analyse(source_code: str, language: str | None = None) -> list[dict]:
     if language == "python":
         findings.extend(analyse_python(source_code))
     findings.extend(detect_semantic_patterns(source_code, language))
+    findings.extend(detect_bugs(source_code, language))
     findings.extend(analyse_taint(source_code, language))
     findings.extend(detect_quality_issues(source_code, language))
 
