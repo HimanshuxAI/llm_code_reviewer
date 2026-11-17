@@ -1,4 +1,7 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+// API base. Unset means same origin (works when the SPA is served from the
+// same host as the API, e.g. the Render single-container deploy). For local
+// dev with Vite on :5173 and the API on :8000, set VITE_API_BASE in .env.
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 // Namespaced on purpose. localhost:5173 is shared with any other app on
 // that port, and a generic "token" key let one app's session overwrite
