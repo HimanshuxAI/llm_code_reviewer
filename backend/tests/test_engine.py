@@ -75,3 +75,87 @@ def test_code_after_return_in_if_is_reachable():
 def test_list_mutated_during_iteration_is_flagged():
     findings = analyse("for x in items:\n    items.append(x)\n", "python")
     assert any(f["rule_id"] == "PY006" for f in findings)
+
+
+def test_unused_import_is_flagged():
+    findings = analyse("import os\nimport sys\nprint(1)\n", "python")
+    rule_ids = {f["rule_id"] for f in findings}
+    assert "PY007" in rule_ids
+    titles = {f["title"] for f in findings if f["rule_id"] == "PY007"}
+    assert any("os" in t for t in titles)
+    assert any("sys" in t for t in titles)
+
+
+def test_used_import_is_not_flagged():
+    findings = analyse("import os\nprint(os.getcwd())\n", "python")
+    assert not any(f["rule_id"] == "PY007" for f in findings)
+
+
+def test_builtin_shadowing_is_flagged():
+    findings = analyse("list = [1, 2]\nprint(list)\n", "python")
+    assert any(f["rule_id"] == "PY008" and "list" in f["title"] for f in findings)
+
+
+def test_builtin_shadowing_str_is_flagged():
+    findings = analyse("str = \"hello\"\n", "python")
+    assert any(f["rule_id"] == "PY008" for f in findings)
+
+
+def test_normal_variable_is_not_shadowing():
+    findings = analyse("my_list = [1, 2]\nprint(my_list)\n", "python")
+    assert not any(f["rule_id"] == "PY008" for f in findings)
+
+
+def test_dict_mutated_during_iteration_is_flagged():
+    findings = analyse("for k in d:\n    d.pop(k)\n", "python")
+    assert any(f["rule_id"] == "PY009" for f in findings)
+
+
+def test_dict_clear_during_iteration_is_flagged():
+    findings = analyse("for k in d:\n    d.clear()\n", "python")
+    assert any(f["rule_id"] == "PY009" for f in findings)
+
+
+def test_compare_none_with_eq_is_flagged():
+    findings = analyse("if x == None:\n    pass\n", "python")
+    assert any(f["rule_id"] == "PY010" for f in findings)
+
+
+def test_compare_true_with_eq_is_flagged():
+    findings = analyse("flag == True\n", "python")
+    assert any(f["rule_id"] == "PY010" for f in findings)
+
+
+def test_compare_none_with_is_is_not_flagged():
+    findings = analyse("if x is None:\n    pass\n", "python")
+    assert not any(f["rule_id"] == "PY010" for f in findings)
+
+
+def test_type_eq_comparison_is_flagged():
+    findings = analyse("if type(x) == int:\n    pass\n", "python")
+    assert any(f["rule_id"] == "PY011" for f in findings)
+
+
+def test_isinstance_is_not_flagged():
+    findings = analyse("if isinstance(x, int):\n    pass\n", "python")
+    assert not any(f["rule_id"] == "PY011" for f in findings)
+
+
+def test_scope_aware_unused_variable_in_function():
+    # x assigned inside f() and used inside f(); not flagged
+    findings = analyse("def f():\n    x = 1\n    print(x)\n", "python")
+    assert not any(f["rule_id"] == "PY004" and "x" in f["title"] for f in findings)
+
+
+def test_scope_aware_unused_variable_only_in_function():
+    # x assigned inside f() but never used there; flagged
+    findings = analyse("def f():\n    x = 1\n    return 2\n", "python")
+    assert any(f["rule_id"] == "PY004" and "x" in f["title"] for f in findings)
+
+
+def test_module_level_unused_and_function_level_unused_both_flagged():
+    findings = analyse("a = 1\ndef f():\n    b = 2\n    return 3\n", "python")
+    py004 = [f for f in findings if f["rule_id"] == "PY004"]
+    titles = {f["title"] for f in py004}
+    assert any("a" in t for t in titles)
+    assert any("b" in t for t in titles)
