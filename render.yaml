@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: code-reviewer
+    env: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite:////app/data/reviews.db
+      - key: STATIC_DIR
+        value: /app/static
+      - key: PORT
+        value: 8000
+    disk:
+      name: reviews-data
+      mountPath: /app/data
+      sizeGB: 1
