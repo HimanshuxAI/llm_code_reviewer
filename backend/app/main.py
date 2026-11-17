@@ -29,4 +29,7 @@ app.include_router(reviews_router, prefix="/api")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "engines": ["rules", "taint", "secrets", "ast", "sinks", "quality"],
+    }

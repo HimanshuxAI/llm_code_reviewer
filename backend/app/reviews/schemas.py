@@ -16,7 +16,10 @@ class FindingOut(BaseModel):
     explanation: str
     suggestion: str
     source: str
-    fixed_snippet: str | None
+    fixed_snippet: str | None = None
+    evidence: str = ""
+    confidence: str = "high"
+    related_lines: list[int] = []
 
 
 class ReviewOut(BaseModel):

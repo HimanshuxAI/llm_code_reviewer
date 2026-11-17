@@ -1,10 +1,10 @@
 from app.main import app
 
 
-def test_health_endpoint(client):
+def test_health_endpoint_reports_engines(client):
     resp = client.get("/api/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    assert resp.json()["engines"] == ["rules", "taint", "secrets", "ast", "sinks", "quality"]
 
 
 def test_app_does_not_use_deprecated_on_event():
